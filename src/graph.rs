@@ -283,7 +283,7 @@ mod test {
 
         let mut options = optionblk::default();
         options.writeautoms = TRUE;
-        //options.defaultptn = FALSE;
+        options.defaultptn = FALSE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; 8];
 
