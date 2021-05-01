@@ -1,3 +1,10 @@
+#![warn(rust_2018_idioms)]
+//#![deny(warnings, missing_docs)]
+
+//! Project to find heuristics for
+//! descriptive quotients of graphs
+//! for certain conditions.
+
 use std::{
     error::Error,
     io::{self},
@@ -14,6 +21,8 @@ use graph::{NautyGraph, VertexIndex};
 
 mod input;
 use input::{read_graph, read_vertex};
+
+use crate::combinatoric::iterate_powerset;
 
 mod combinatoric;
 
@@ -80,9 +89,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(nauty_graph.check_valid());
     let generators = compute_generators_with_nauty(nauty_graph);
 
-    for generator in generators {
-        println!("{:?}", generator);
-    }
+    let f = |subset: &[Vec<i32>]| {
+        print!("{{");
+        for generator in subset.iter() {
+            print!("{:?}", generator)
+        }
+        println!("}}")
+    };
+
+    iterate_powerset(&generators, f);
 
     Ok(())
 }

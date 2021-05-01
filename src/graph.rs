@@ -252,7 +252,7 @@ impl NautyGraph {
 
 #[cfg(test)]
 mod test {
-    use nauty_Traces_sys::{densenauty, optionblk, statsblk, FALSE, TRUE};
+    use nauty_Traces_sys::{densenauty, optionblk, statsblk, FALSE};
 
     use super::*;
 
@@ -282,7 +282,7 @@ mod test {
         assert_eq!(nauty_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
 
         let mut options = optionblk::default();
-        options.writeautoms = TRUE;
+        options.writeautoms = FALSE;
         options.defaultptn = FALSE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; 8];
