@@ -22,14 +22,18 @@ use graph::{NautyGraph, VertexIndex};
 mod input;
 use input::{read_graph, read_vertex};
 
-use crate::combinatoric::iterate_powerset;
-
 mod combinatoric;
+use combinatoric::iterate_powerset;
+
+mod encoding;
+
+mod quotient;
+use quotient::{generate_orbits, Generators};
 
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
-fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Vec<c_int>> {
+fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
     let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();
 
@@ -84,20 +88,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // ... compute the generators with nauty.
+    // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
     assert!(nauty_graph.check_valid());
-    let generators = compute_generators_with_nauty(nauty_graph);
+    let mut generators = compute_generators_with_nauty(nauty_graph);
 
-    let f = |subset: &[Vec<i32>]| {
-        print!("{{");
-        for generator in subset.iter() {
-            print!("{:?}", generator)
-        }
-        println!("}}")
+    let f = |subset: &mut Vec<Vec<i32>>| {
+        let orbits = generate_orbits(subset);
+        println!("Orbits for generator {:?}:\n {:?}", subset, orbits);
     };
 
-    iterate_powerset(&generators, f);
+    // ... iterate over all possible subsets of generators.
+    iterate_powerset(&mut generators, f);
 
     Ok(())
 }

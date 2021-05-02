@@ -1,3 +1,7 @@
+//! Simple combinatorial helper functions
+//! that allow to search the powerset of
+//! generators for some tha induce descriptive quotients.
+
 fn is_active(n: usize, index: usize) -> bool {
     (n & (1 << index)) > 0
 }
@@ -5,7 +9,7 @@ fn is_active(n: usize, index: usize) -> bool {
 pub fn iterate_powerset<T, F>(set: &Vec<T>, f: F)
 where
     T: Clone,
-    F: Fn(&[T]),
+    F: Fn(&mut Vec<T>),
 {
     let elements_number = set.len();
 
@@ -25,7 +29,7 @@ where
             }
         }
 
-        f(&subset[..]);
+        f(&mut subset);
         subset.clear();
     }
 }
@@ -53,7 +57,7 @@ mod test {
     #[test]
     fn test_iterate() {
         let set: Vec<i32> = vec![1, 2];
-        let f = |xs: &[i32]| {
+        let f = |xs: &mut Vec<i32>| {
             println!("{:?}", xs);
             for x in xs[..].iter() {
                 assert!(*x > 0);

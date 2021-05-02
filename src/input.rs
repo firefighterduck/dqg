@@ -1,3 +1,7 @@
+//! Provides convenient functions to read
+//! graphs from stdin. Uses similar commands
+//! as dreadnaut.
+
 use std::io::{self, Stdin, Write};
 
 use crate::graph::{Graph, VertexIndex};

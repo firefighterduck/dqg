@@ -1,3 +1,8 @@
+//! Representation of graphs as well as
+//! functionalities to build them from
+//! simple building blocks or switch to
+//! to a representation understand by nauty.
+
 use std::{os::raw::c_int, usize};
 
 use nauty_Traces_sys::{empty_graph, ADDONEARC, SETWORDSNEEDED};
