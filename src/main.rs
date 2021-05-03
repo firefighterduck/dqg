@@ -8,16 +8,10 @@
 use std::{
     error::Error,
     io::{self},
-    os::raw::c_int,
-    slice::from_raw_parts,
-    usize,
 };
 
-use libffi::high::ClosureMut6;
-use nauty_Traces_sys::{densenauty, optionblk, statsblk};
-
 mod graph;
-use graph::{NautyGraph, VertexIndex};
+use graph::VertexIndex;
 
 mod input;
 use input::{read_graph, read_vertex};
@@ -28,57 +22,9 @@ use combinatoric::iterate_powerset;
 mod encoding;
 
 mod quotient;
-use quotient::{generate_orbits, Generators};
+use quotient::{compute_generators_with_nauty, generate_orbits};
 
 use crate::quotient::QuotientGraph;
-
-/// Call nauty with the given graph representation
-/// and compute the generators of the automorphism group
-/// for the graph. Return the generators.
-fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
-    let (n, m) = nauty_graph.graph_repr_sizes();
-    let mut generators = Vec::new();
-
-    // Limit how long the closure can reference generators so that we can return it afterwards.
-    {
-        // Callback that copies the current generator.
-        let mut userautomproc =
-            |_count, generator_ptr: *mut c_int, _orbits, _numorbits, _stabvertex, n: c_int| {
-                let mut generator = Vec::with_capacity(n as usize);
-                let generator_raw = unsafe { from_raw_parts(generator_ptr, n as usize) };
-
-                for vertex in generator_raw {
-                    generator.push(*vertex);
-                }
-
-                generators.push(generator);
-            };
-        let userautomproc = ClosureMut6::new(&mut userautomproc);
-
-        let mut options = optionblk::default();
-        options.userautomproc = Some(*userautomproc.code_ptr());
-        let mut stats = statsblk::default();
-        let mut orbits = vec![0 as c_int; n];
-
-        // Safety: Call to nauty library function that computes
-        // the automorphism group generator through useratomproc.
-        unsafe {
-            densenauty(
-                nauty_graph.adjacency_matrix.as_mut_ptr(),
-                nauty_graph.vertex_order.as_mut_ptr(),
-                nauty_graph.partition.as_mut_ptr(),
-                orbits.as_mut_ptr(),
-                &mut options,
-                &mut stats,
-                m as c_int,
-                n as c_int,
-                std::ptr::null_mut(),
-            );
-        }
-    }
-
-    generators
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let stdin = io::stdin();
