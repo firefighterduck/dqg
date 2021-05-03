@@ -11,19 +11,19 @@ where
     T: Clone,
     F: Fn(&mut Vec<T>),
 {
-    let elements_number = set.len();
+    let number_of_elements = set.len();
 
     // I don't really care about more than 64 generators for now.
     // Change after 1.53.0 to usize::BITS (currently unstable after regressions)
-    if elements_number > 64 {
+    if number_of_elements > 64 {
         unimplemented!()
     }
 
-    let mut subset = Vec::with_capacity(elements_number);
+    let mut subset = Vec::with_capacity(number_of_elements);
 
     // If `elements_numbers` would be bigger than 64 we would run into trouble here:
-    for counter in 1..(2usize.pow(elements_number as u32)) {
-        for element_index in 0..elements_number {
+    for counter in 1..(2usize.pow(number_of_elements as u32)) {
+        for element_index in 0..number_of_elements {
             if is_active(counter, element_index) {
                 subset.push(set[element_index].clone());
             }

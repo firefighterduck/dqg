@@ -1,10 +1,12 @@
 //! Functionalities to build quotient graphs from
 //! a set of generators and manage the orbits.
 
+use custom_debug_derive::Debug;
+use itertools::Itertools;
 use nauty_Traces_sys::orbjoin;
 use std::os::raw::c_int;
 
-use crate::graph::VertexIndex;
+use crate::graph::{Graph, Vertex, VertexIndex};
 
 pub type Generators = Vec<Vec<VertexIndex>>;
 pub type Orbits = Vec<VertexIndex>;
@@ -36,19 +38,67 @@ fn empty_orbits(number_vertices: usize) -> Orbits {
     orbits
 }
 
+fn get_orbit(orbits: &Orbits, vertex: VertexIndex) -> VertexIndex {
+    *orbits
+        .get(vertex as usize)
+        .expect("Vertex not part of given orbits!")
+}
+
 // Generate the orbits of a quotient graph from the generators of the original graph.
 pub fn generate_orbits(generators: &mut Generators) -> Orbits {
-    let number_vertices = generators
+    let number_of_vertices = generators
         .get(0)
-        .expect("Empty subsets are not useful at all.")
+        .expect("Empty subset can't be used to generate orbits")
         .len();
-    let mut orbits = empty_orbits(number_vertices);
+    let mut orbits = empty_orbits(number_of_vertices);
 
     for generator in generators {
         apply_generator(generator, &mut orbits);
     }
 
     orbits
+}
+
+/// Represents a quotient graph where the vertices are
+/// orbits. It also holds the reference to which original
+/// vertices are part of which orbit.
+#[derive(Debug)]
+pub struct QuotientGraph {
+    quotient_graph: Graph,
+    #[debug(skip)]
+    orbits: Orbits,
+}
+
+impl QuotientGraph {
+    /// Generates the quotient graph where each orbit is represented
+    /// by the vertex with the smallest index in the orbit.
+    pub fn from_graph_orbits(graph: &Graph, orbits: Orbits) -> Self {
+        let number_of_orbits = orbits.iter().unique().count();
+        let mut quotient_graph = Graph::new_empty(number_of_orbits);
+
+        // We don't need to search for edges if there can't be any.
+        if number_of_orbits > 0 {
+            // Add edges between the orbits if single vertices in these are
+            // connected by and edge. Doesn't add edges within the same orbit.
+            graph.iterate_edges(|(start, end)| {
+                let start_orbit = get_orbit(&orbits, start);
+                let end_orbit = get_orbit(&orbits, end);
+                if start_orbit != end_orbit {
+                    quotient_graph.add_arc(start_orbit, end_orbit);
+                }
+            });
+
+            // Edges between orbits might be generated more often than once.
+            quotient_graph.minimize();
+        } else {
+            quotient_graph.add_vertex(Vertex::new(0, -1));
+        }
+
+        QuotientGraph {
+            quotient_graph,
+            orbits,
+        }
+    }
 }
 
 #[cfg(test)]

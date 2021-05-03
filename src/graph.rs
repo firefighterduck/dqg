@@ -2,10 +2,9 @@
 //! functionalities to build them from
 //! simple building blocks or switch to
 //! to a representation understand by nauty.
-
-use std::{os::raw::c_int, usize};
-
+use custom_debug_derive::Debug;
 use nauty_Traces_sys::{empty_graph, ADDONEARC, SETWORDSNEEDED};
+use std::os::raw::c_int;
 
 pub type Colour = c_int;
 pub type VertexIndex = c_int;
@@ -21,20 +20,33 @@ enum GraphState {
 #[derive(Debug)]
 pub struct Graph {
     vertices: Vec<Vertex>,
+    #[debug(skip)]
     state: GraphState,
+    #[debug(skip)]
     keep_state_auto: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
     pub index: VertexIndex,
-    pub edges_to: Vec<c_int>,
+    pub edges_to: Vec<VertexIndex>,
     pub colour: Colour,
+}
+
+pub fn bin_fmt(vec: &Vec<u64>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{{")?;
+    for number in vec {
+        write!(f, "{:#066b}", number)?;
+    }
+    write!(f, "}}")?;
+
+    Ok(())
 }
 
 #[derive(Debug)]
 pub struct NautyGraph {
     /// actual graph
+    #[debug(with = "bin_fmt")]
     pub adjacency_matrix: Vec<u64>,
     /// lab
     pub vertex_order: Vec<VertexIndex>,
@@ -130,6 +142,26 @@ impl Graph {
     pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) {
         self.add_arc(start, end);
         self.add_arc(end, start);
+    }
+
+    pub fn iterate_edges<F>(&self, mut f: F)
+    where
+        F: FnMut((VertexIndex, VertexIndex)),
+    {
+        for vertex in self.vertices.iter() {
+            for end in vertex.edges_to.iter() {
+                f((vertex.index, *end));
+            }
+        }
+    }
+
+    /// Remove unneccessary edges.
+    /// Does so by first sorting, thus trading runtime for reduced memory footprint.
+    pub fn minimize(&mut self) {
+        for vertex in self.vertices.iter_mut() {
+            vertex.edges_to.sort();
+            vertex.edges_to.dedup();
+        }
     }
 
     pub fn set_colours(&mut self, colours: &[Colour]) {

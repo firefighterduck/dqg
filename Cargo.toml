@@ -10,3 +10,5 @@ edition = "2018"
 nauty-Traces-sys = {git = "https://github.com/firefighterduck/nauty-Traces-sys"}
 kissat-rs = {git = "https://github.com/firefighterduck/kissat-rs", branch = "main" }
 libffi = "1.0.0"
+custom_debug_derive = "0.5.0"
+itertools = "0.10.0"

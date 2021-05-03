@@ -30,16 +30,14 @@ mod encoding;
 mod quotient;
 use quotient::{generate_orbits, Generators};
 
+use crate::quotient::QuotientGraph;
+
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
 fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
     let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();
-
-    let mut options = optionblk::default();
-    let mut stats = statsblk::default();
-    let mut orbits = vec![0 as c_int; n];
 
     // Limit how long the closure can reference generators so that we can return it afterwards.
     {
@@ -56,8 +54,14 @@ fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
                 generators.push(generator);
             };
         let userautomproc = ClosureMut6::new(&mut userautomproc);
-        options.userautomproc = Some(*userautomproc.code_ptr());
 
+        let mut options = optionblk::default();
+        options.userautomproc = Some(*userautomproc.code_ptr());
+        let mut stats = statsblk::default();
+        let mut orbits = vec![0 as c_int; n];
+
+        // Safety: Call to nauty library function that computes
+        // the automorphism group generator through useratomproc.
         unsafe {
             densenauty(
                 nauty_graph.adjacency_matrix.as_mut_ptr(),
@@ -72,6 +76,7 @@ fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
             );
         }
     }
+
     generators
 }
 
@@ -95,7 +100,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let f = |subset: &mut Vec<Vec<i32>>| {
         let orbits = generate_orbits(subset);
-        println!("Orbits for generator {:?}:\n {:?}", subset, orbits);
+        let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+        println!(
+            "Quotient for generator {:?}:\n {:?}",
+            subset, quotient_graph
+        );
     };
 
     // ... iterate over all possible subsets of generators.
