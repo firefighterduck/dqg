@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // ... iterate over all possible subsets of generators.
-    generators.into_iter().powerset().for_each(f);
+    generators.into_iter().powerset().skip(1).for_each(f);
 
     Ok(())
 }

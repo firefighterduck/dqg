@@ -14,6 +14,7 @@ use crate::{
 
 pub type Clause = Vec<Literal>;
 pub type Formula = Vec<Clause>;
+const MAX_LITERAL: Literal = 2i32.pow(28) - 1;
 
 /// Trait that defines whether a type can be encoded
 /// into a high level view of a SAT formula.
@@ -141,12 +142,14 @@ impl SATEncodingDictionary {
         // The return value must also be a valid literal.
         // Whereas the normally assigned literals grow from 0,
         // the paired ones grow from the positive max value to reduce collisions.
+        // For some reason or other, the max literal for Kissat
+        // is 2^28-1. Thus, this is used.
         assert!(
-            self.literal_counter < Literal::MAX - pairing_result,
+            self.literal_counter < MAX_LITERAL - pairing_result,
             "SAT vertex variable space and pair variable space intersect!"
         );
 
-        Literal::MAX - pairing_result
+        MAX_LITERAL - pairing_result
     }
 
     fn get_new_literal(&mut self) -> Literal {
