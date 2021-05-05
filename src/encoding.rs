@@ -23,10 +23,10 @@ trait HighLevelEncoding {
 }
 
 trait SATEncoding {
-    fn encode_sat<Dict>(&self, dict: &mut SATEncodingDictionary) -> Formula;
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary) -> Formula;
 }
 
-pub type EdgeEncoding = (VertexIndex, VertexIndex);
+type EdgeEncoding = (VertexIndex, VertexIndex);
 
 impl HighLevelEncoding for Graph {
     type HighLevelRepresentation = Vec<EdgeEncoding>;
@@ -35,14 +35,14 @@ impl HighLevelEncoding for Graph {
         let mut edges = Vec::new();
 
         self.iterate_edges(|edge| {
-            edges.push(edge); // Currently not undirected edges but rather directed arcs.
+            edges.push(edge);
         });
 
         edges
     }
 }
 
-pub type OrbitEncoding = (VertexIndex, Vec<VertexIndex>);
+type OrbitEncoding = (VertexIndex, Vec<VertexIndex>);
 
 impl HighLevelEncoding for Orbits {
     type HighLevelRepresentation = Vec<OrbitEncoding>;
@@ -66,7 +66,7 @@ impl HighLevelEncoding for Orbits {
     }
 }
 
-pub type QuotientGraphEncoding = (Vec<EdgeEncoding>, Vec<OrbitEncoding>);
+type QuotientGraphEncoding = (Vec<EdgeEncoding>, Vec<OrbitEncoding>);
 
 impl HighLevelEncoding for QuotientGraph {
     type HighLevelRepresentation = QuotientGraphEncoding;
@@ -76,7 +76,7 @@ impl HighLevelEncoding for QuotientGraph {
     }
 }
 
-pub struct SATEncodingDictionary {
+struct SATEncodingDictionary {
     literal_counter: Literal,
     vertex_map: HashMap<VertexIndex, Literal>,
     orbit_map: HashMap<VertexIndex, Literal>,
@@ -93,10 +93,6 @@ impl SATEncodingDictionary {
 
     pub fn lookup_vertex(&self, vertex: &VertexIndex) -> Option<Literal> {
         self.vertex_map.get(vertex).map(|literal_ref| *literal_ref)
-    }
-
-    pub fn lookup_orbit(&self, orbit: &VertexIndex) -> Option<Literal> {
-        self.orbit_map.get(orbit).map(|literal_ref| *literal_ref)
     }
 
     pub fn lookup_edge(&mut self, edge: &EdgeEncoding) -> Option<Literal> {
@@ -139,8 +135,18 @@ impl SATEncodingDictionary {
         }
     }
 
-    fn pairing(&mut self, first: VertexIndex, second: VertexIndex) -> Literal {
-        todo!()
+    /// This computes the Cantor pairing function for th two given literals.
+    fn pairing(&mut self, first: Literal, second: Literal) -> Literal {
+        let pairing_result = (first + second) * (first + second + 1) / 2 + second;
+        // The return value must also be a valid literal.
+        // Whereas the normally assigned literals grow from 0,
+        // the paired ones grow from the positive max value to reduce collisions.
+        assert!(
+            self.literal_counter < Literal::MAX - pairing_result,
+            "SAT vertex variable space and pair variable space intersect!"
+        );
+
+        Literal::MAX - pairing_result
     }
 
     fn get_new_literal(&mut self) -> Literal {
@@ -151,14 +157,14 @@ impl SATEncodingDictionary {
 }
 
 impl SATEncoding for EdgeEncoding {
-    fn encode_sat<Dict>(&self, dict: &mut SATEncodingDictionary) -> Formula {
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary) -> Formula {
         let edge_literal = dict.lookup_or_add_edge(self);
         vec![vec![edge_literal]]
     }
 }
 
 impl SATEncoding for OrbitEncoding {
-    fn encode_sat<Dict>(&self, dict: &mut SATEncodingDictionary) -> Formula {
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary) -> Formula {
         // This is actually the encoding that a valid transversal
         // can only choose one element from the orbit.
 
@@ -203,8 +209,7 @@ impl SATEncoding for OrbitEncoding {
 }
 
 impl SATEncoding for QuotientGraphEncoding {
-    fn encode_sat<Dict>(&self, dict: &mut SATEncodingDictionary) -> Formula
-where {
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary) -> Formula {
         // This is actually the encoding that edges between two
         // vertices (i.e. two orbits) of a quotient graph is preserved
         // when the transversal chooses two vertices from the orbits.
@@ -213,7 +218,9 @@ where {
 
         // for all (o1,o2) edges in the quotient graph G\O (i.e. o1, o2 in O)
         for (start_orbit, end_orbit) in quotient_edges {
-            let edge_encoding = dict.pairing(*start_orbit, *end_orbit);
+            let start_encoding = dict.lookup_or_add_orbit(start_orbit);
+            let end_encoding = dict.lookup_or_add_orbit(end_orbit);
+            let edge_encoding = dict.pairing(start_encoding, end_encoding);
             let start_orbit_elements = orbits
                 .iter()
                 .find_map(|(orbit_number, orbit_elements)| {
@@ -241,12 +248,14 @@ where {
 
             // for all vertices v1 in o1
             for start_orbit_element in start_orbit_elements {
+                let start_element_encoding = dict.lookup_or_add_vertex(start_orbit_element);
                 // for all vertices v2 in o2
                 for end_orbit_element in end_orbit_elements {
-                    let start_orbit_relation = dict.pairing(*start_orbit, *start_orbit_element);
-                    let end_orbit_relation = dict.pairing(*end_orbit, *end_orbit_element);
+                    let end_element_encoding = dict.lookup_or_add_vertex(end_orbit_element);
+                    let start_orbit_relation = dict.pairing(start_encoding, start_element_encoding);
+                    let end_orbit_relation = dict.pairing(end_encoding, end_element_encoding);
                     let original_edge_encoding =
-                        dict.pairing(*start_orbit_element, *end_orbit_element);
+                        dict.pairing(start_element_encoding, end_element_encoding);
 
                     // If there is an edge in the quotient graph,
                     // the transversal needs to pick vertices from
@@ -267,6 +276,34 @@ where {
 
         formula
     }
+}
+
+/// Encode the decision problem whether a set of generators
+/// induces a descriptive quotient graph into SAT.
+pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula {
+    let mut dict = SATEncodingDictionary::new();
+
+    let mut graph_edges_encoding: Formula = graph
+        .encode_high()
+        .into_iter()
+        .flat_map(|edge| edge.encode_sat(&mut dict))
+        .collect();
+    let (quotient_edges, orbits) = quotient_graph.encode_high();
+    let mut quotient_edges_encoding: Formula = quotient_edges
+        .iter()
+        .flat_map(|edge| edge.encode_sat(&mut dict))
+        .collect();
+    let mut transversal_encoding: Formula = orbits
+        .iter()
+        .flat_map(|orbit| orbit.encode_sat(&mut dict))
+        .collect();
+    let mut descriptive_constraint_encoding = (quotient_edges, orbits).encode_sat(&mut dict);
+
+    graph_edges_encoding.append(&mut quotient_edges_encoding);
+    graph_edges_encoding.append(&mut transversal_encoding);
+    graph_edges_encoding.append(&mut descriptive_constraint_encoding);
+
+    graph_edges_encoding
 }
 
 #[cfg(test)]

@@ -5,10 +5,8 @@
 //! descriptive quotients of graphs
 //! for certain conditions.
 
-use std::{
-    error::Error,
-    io::{self},
-};
+use itertools::Itertools;
+use std::{error::Error, io};
 
 mod graph;
 use graph::VertexIndex;
@@ -16,15 +14,16 @@ use graph::VertexIndex;
 mod input;
 use input::{read_graph, read_vertex};
 
-mod combinatoric;
-use combinatoric::iterate_powerset;
-
-mod encoding;
+// mod combinatoric; unused for now, may be helpful for increasing performance lateron
 
 mod quotient;
-use quotient::{compute_generators_with_nauty, generate_orbits};
+use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
 
-use crate::quotient::QuotientGraph;
+mod encoding;
+use encoding::encode_problem;
+
+mod sat_solving;
+use sat_solving::solve;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let stdin = io::stdin();
@@ -42,19 +41,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
     assert!(nauty_graph.check_valid());
-    let mut generators = compute_generators_with_nauty(nauty_graph);
+    let generators = compute_generators_with_nauty(nauty_graph);
 
-    let f = |subset: &mut Vec<Vec<i32>>| {
-        let orbits = generate_orbits(subset);
+    let f = |mut subset| {
+        let orbits = generate_orbits(&mut subset);
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
         println!(
             "Quotient for generator {:?}:\n {:?}",
             subset, quotient_graph
         );
+        let formula = encode_problem(&graph, &quotient_graph);
+        println!("Quotient is descriptive?: {}", solve(formula));
     };
 
     // ... iterate over all possible subsets of generators.
-    iterate_powerset(&mut generators, f);
+    generators.into_iter().powerset().for_each(f);
 
     Ok(())
 }
