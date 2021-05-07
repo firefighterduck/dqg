@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-//#![deny(warnings, missing_docs)]
+#![deny(warnings, missing_docs)]
 
 //! Project to find heuristics for
 //! descriptive quotients of graphs
@@ -46,10 +46,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let f = |mut subset| {
         let orbits = generate_orbits(&mut subset);
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        println!(
-            "Quotient for generator {:?}:\n {:?}",
-            subset, quotient_graph
-        );
         let formula = encode_problem(&graph, &quotient_graph);
         println!("Quotient is descriptive?: {}", solve(formula));
     };

@@ -10,6 +10,9 @@ pub type Colour = c_int;
 pub type VertexIndex = c_int;
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct GraphError(VertexIndex);
+
+#[derive(Debug, PartialEq, Eq)]
 enum GraphState {
     IndexOrdered,
     ColourGrouped,
@@ -17,16 +20,18 @@ enum GraphState {
     Chaos,
 }
 
+/// Fixed size graph.
 #[derive(Debug)]
 pub struct Graph {
     vertices: Vec<Vertex>,
+    size: usize,
     #[debug(skip)]
     state: GraphState,
     #[debug(skip)]
     keep_state_auto: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Vertex {
     pub index: VertexIndex,
     pub edges_to: Vec<VertexIndex>,
@@ -55,93 +60,101 @@ pub struct NautyGraph {
 }
 
 impl Graph {
-    pub fn new_empty(n: usize) -> Self {
-        Graph {
-            vertices: Vec::with_capacity(n),
-            state: GraphState::Chaos,
-            keep_state_auto: true,
-        }
-    }
-
     pub fn size(&self) -> usize {
-        self.vertices.len()
+        self.size
     }
 
     pub fn new_ordered(n: usize) -> Self {
         let mut vertices = Vec::with_capacity(n);
         for index in 0..n {
-            vertices.push(Vertex::new(index as VertexIndex, 0));
+            vertices.push(Vertex::new(index as VertexIndex, -1));
         }
         Graph {
             vertices,
+            size: n,
             state: GraphState::IndexOrdered,
             keep_state_auto: true,
         }
     }
 
-    pub fn from_colour_list(coloured_vertices: &[Colour]) -> Self {
+    pub fn new_with_indices(indices: &[VertexIndex]) -> Self {
+        let mut vertices = Vec::with_capacity(indices.len());
+        for index in indices {
+            vertices.push(Vertex::new(*index, -1));
+        }
+        Graph {
+            vertices,
+            size: indices.len(),
+            state: GraphState::Chaos,
+            keep_state_auto: false,
+        }
+    }
+
+    pub fn _from_colour_list(coloured_vertices: &[Colour]) -> Self {
         let mut vertices = Vec::with_capacity(coloured_vertices.len());
         for (index, colour) in coloured_vertices.iter().enumerate() {
             vertices.push(Vertex::new(index as VertexIndex, *colour));
         }
         Graph {
             vertices,
+            size: coloured_vertices.len(),
             state: GraphState::Chaos,
             keep_state_auto: true,
         }
     }
 
-    pub fn add_vertex(&mut self, vertex: Vertex) {
-        use GraphState::*;
+    pub fn set_vertex(&mut self, new_vertex: Vertex) -> Result<(), GraphError> {
+        let index = new_vertex.index;
+        if let GraphState::IndexOrdered = self.state {
+            *self
+                .vertices
+                .get_mut(index as usize)
+                .ok_or(GraphError(index))? = new_vertex;
+        } else {
+            *self
+                .vertices
+                .iter_mut()
+                .find(|vertex| vertex.index == index)
+                .ok_or(GraphError(index))? = new_vertex;
+            self.state = GraphState::Chaos;
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn get_vertex(&mut self, index: VertexIndex) -> Result<&Vertex, GraphError> {
         match self.state {
-            IndexOrdered => {
-                let index = vertex.index as usize;
-                if let Some(old_vertex) = self.vertices.get_mut(index) {
-                    *old_vertex = vertex;
-                } else {
-                    if self.vertices.len() < index {
-                        self.vertices.reserve(index - self.vertices.len() + 1);
-                    }
-                    self.vertices[index] = vertex;
-                }
-            }
-            _ => {
-                self.vertices.push(vertex);
-                self.state = Chaos;
-            }
+            GraphState::IndexOrdered => self.vertices.get(index as usize).ok_or(GraphError(index)),
+            _ => self
+                .vertices
+                .iter()
+                .find(|vertex| vertex.index == index)
+                .ok_or(GraphError(index)),
         }
     }
 
-    fn get_vertex(&mut self, index: VertexIndex) -> Option<&Vertex> {
+    fn get_vertex_mut(&mut self, index: VertexIndex) -> Result<&mut Vertex, GraphError> {
         match self.state {
-            GraphState::IndexOrdered => self.vertices.get(index as usize),
-            _ => self.vertices.iter().find(|vertex| vertex.index == index),
-        }
-    }
-
-    fn get_vertex_mut(&mut self, index: VertexIndex) -> Option<&mut Vertex> {
-        match self.state {
-            GraphState::IndexOrdered => self.vertices.get_mut(index as usize),
+            GraphState::IndexOrdered => self
+                .vertices
+                .get_mut(index as usize)
+                .ok_or(GraphError(index)),
             _ => self
                 .vertices
                 .iter_mut()
-                .find(|vertex| vertex.index == index),
+                .find(|vertex| vertex.index == index)
+                .ok_or(GraphError(index)),
         }
     }
 
-    pub fn add_arc(&mut self, start: VertexIndex, end: VertexIndex) {
-        if let Some(start_vertex) = self.get_vertex_mut(start) {
-            start_vertex.add_edge(end);
-        } else {
-            let mut vertex = Vertex::new(start, 0);
-            vertex.add_edge(end);
-            self.add_vertex(vertex);
-        }
+    pub fn add_arc(&mut self, start: VertexIndex, end: VertexIndex) -> Result<(), GraphError> {
+        self.get_vertex_mut(start)?.add_edge(end);
+        Ok(())
     }
 
-    pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) {
-        self.add_arc(start, end);
-        self.add_arc(end, start);
+    pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) -> Result<(), GraphError> {
+        self.add_arc(start, end)?;
+        self.add_arc(end, start)
     }
 
     pub fn iterate_edges<F>(&self, mut f: F)
@@ -164,32 +177,29 @@ impl Graph {
         }
     }
 
-    pub fn set_colours(&mut self, colours: &[Colour]) {
+    #[cfg(test)]
+    pub fn set_colours(&mut self, colours: &[Colour]) -> Result<(), GraphError> {
         for (index, colour) in colours.iter().enumerate() {
-            if let Some(vertex) = self.get_vertex_mut(index as VertexIndex) {
-                vertex.colour = *colour;
-            } else {
-                self.add_vertex(Vertex::new(index as VertexIndex, *colour));
-            }
+            self.get_vertex_mut(index as VertexIndex)?.colour = *colour;
         }
 
         self.keep_state_auto = false;
         self.state = GraphState::ColourGroupedOrdered;
+        Ok(())
     }
 
-    pub fn order(&mut self, order: &[VertexIndex]) {
+    #[cfg(test)]
+    pub fn order(&mut self, order: &[VertexIndex]) -> Result<(), GraphError> {
         let mut ordered_vertices = Vec::with_capacity(self.vertices.len());
         for index in order {
-            if let Some(vertex) = self.get_vertex(*index) {
-                ordered_vertices.push(vertex.clone());
-            } else {
-                ordered_vertices.push(Vertex::new(*index, 0));
-            }
+            let vertex = self.get_vertex(*index)?;
+            ordered_vertices.push(vertex.clone());
         }
 
         self.vertices = ordered_vertices;
         self.keep_state_auto = false;
         self.state = GraphState::IndexOrdered;
+        Ok(())
     }
 
     pub fn group_colours(&mut self) {
@@ -294,29 +304,119 @@ mod test {
     use super::*;
 
     #[test]
-    fn correct_nauty_repr() {
-        let mut graph = Graph::new_empty(8);
-        graph.add_edge(0, 1);
-        graph.add_edge(0, 3);
-        graph.add_edge(0, 4);
-        graph.add_edge(1, 2);
-        graph.add_edge(1, 5);
-        graph.add_edge(2, 3);
-        graph.add_edge(2, 6);
-        graph.add_edge(3, 7);
-        graph.add_edge(4, 5);
-        graph.add_edge(4, 7);
-        graph.add_edge(5, 6);
-        graph.add_edge(6, 7);
+    fn new_graph_default() {
+        let graph = Graph::new_ordered(120);
+        for (index, vertex) in graph.vertices.iter().enumerate() {
+            assert_eq!(index as VertexIndex, vertex.index);
+            assert_eq!(-1, vertex.colour);
+            assert!(vertex.edges_to.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_set_vertex() {
+        let mut graph = Graph::new_ordered(5);
+        assert_eq!(5, graph.size());
+        assert_eq!(GraphState::IndexOrdered, graph.state);
+
+        // First with IndexOrdered
+
+        // In bounds
+        let valid_vertex = Vertex::new(2, 45);
+        assert_eq!(Ok(()), graph.set_vertex(valid_vertex.clone()));
+
+        // Negative index
+        let negative_vertex = Vertex::new(-23, 9);
+        assert_eq!(Err(GraphError(-23)), graph.set_vertex(negative_vertex));
+
+        // Index out of bounds
+        let oob_vertex = Vertex::new(5, 124);
+        assert_eq!(Err(GraphError(5)), graph.set_vertex(oob_vertex));
+
+        // Then with another state
+        graph.state = GraphState::Chaos;
+
+        // In bounds
+        let valid_vertex_chaos = Vertex::new(3, 50);
+        assert_eq!(Ok(()), graph.set_vertex(valid_vertex_chaos.clone()));
+
+        // Negative index
+        let negative_vertex_chaos = Vertex::new(-120, 9);
+        assert_eq!(
+            Err(GraphError(-120)),
+            graph.set_vertex(negative_vertex_chaos)
+        );
+
+        // Index out of bounds
+        let oob_vertex_chaos = Vertex::new(5, 124);
+        assert_eq!(Err(GraphError(5)), graph.set_vertex(oob_vertex_chaos));
+
+        assert_eq!(graph.vertices[0], Vertex::new(0, -1));
+        assert_eq!(graph.vertices[1], Vertex::new(1, -1));
+        assert_eq!(graph.vertices[2], valid_vertex);
+        assert_eq!(graph.vertices[3], valid_vertex_chaos);
+        assert_eq!(graph.vertices[4], Vertex::new(4, -1));
+    }
+
+    #[test]
+    fn test_get_vertex() {
+        let mut graph = Graph::new_ordered(5);
+        assert_eq!(5, graph.size());
+        assert_eq!(GraphState::IndexOrdered, graph.state);
+
+        // First with IndexOrdered
+
+        // In bounds
+        let valid_result = graph.get_vertex_mut(2);
+        assert!(valid_result.is_ok());
+        assert_eq!(&mut Vertex::new(2, -1), valid_result.unwrap());
+
+        // Negative index
+        assert_eq!(Err(GraphError(-3)), graph.get_vertex_mut(-3));
+
+        // Index out of bounds
+        assert_eq!(Err(GraphError(5)), graph.get_vertex_mut(5));
+
+        // Then with another state
+        graph.state = GraphState::Chaos;
+
+        // In bounds
+        let valid_result = graph.get_vertex_mut(3);
+        assert!(valid_result.is_ok());
+        assert_eq!(&mut Vertex::new(3, -1), valid_result.unwrap());
+
+        // Negative index
+        assert_eq!(Err(GraphError(-1)), graph.get_vertex_mut(-1));
+
+        // Index out of bounds
+        assert_eq!(Err(GraphError(5)), graph.get_vertex_mut(5));
+    }
+
+    #[test]
+    fn correct_nauty_repr() -> Result<(), GraphError> {
+        let mut graph = Graph::new_ordered(8);
+        graph.add_edge(0, 1)?;
+        graph.add_edge(0, 3)?;
+        graph.add_edge(0, 4)?;
+        graph.add_edge(1, 2)?;
+        graph.add_edge(1, 5)?;
+        graph.add_edge(2, 3)?;
+        graph.add_edge(2, 6)?;
+        graph.add_edge(3, 7)?;
+        graph.add_edge(4, 5)?;
+        graph.add_edge(4, 7)?;
+        graph.add_edge(5, 6)?;
+        graph.add_edge(6, 7)?;
 
         let order = [2, 0, 1, 3, 4, 5, 6, 7];
         let colours = [1, 2, 2, 2, 2, 2, 2, 2];
-        graph.order(&order);
-        graph.set_colours(&colours);
+        graph.order(&order)?;
+        graph.set_colours(&colours)?;
 
         let mut nauty_graph = graph.prepare_nauty();
         assert_eq!(nauty_graph.vertex_order, order);
         assert_eq!(nauty_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
+        assert!(nauty_graph.check_valid());
 
         let mut options = optionblk::default();
         options.writeautoms = FALSE;
@@ -339,5 +439,6 @@ mod test {
         }
 
         assert_eq!(orbits, [0, 1, 2, 1, 4, 0, 1, 0]);
+        Ok(())
     }
 }

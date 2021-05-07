@@ -122,25 +122,31 @@ impl QuotientGraph {
     /// Generates the quotient graph where each orbit is represented
     /// by the vertex with the smallest index in the orbit.
     pub fn from_graph_orbits(graph: &Graph, orbits: Orbits) -> Self {
-        let number_of_orbits = orbits.iter().unique().count();
-        let mut quotient_graph = Graph::new_empty(number_of_orbits);
+        let unique_orbits: Vec<VertexIndex> = orbits.iter().unique().map(|v| v.clone()).collect();
+        let mut quotient_graph;
 
         // We don't need to search for edges if there can't be any.
-        if number_of_orbits > 0 {
+        if unique_orbits.len() > 1 {
+            quotient_graph = Graph::new_with_indices(&unique_orbits);
             // Add edges between the orbits if single vertices in these are
             // connected by and edge. Doesn't add edges within the same orbit.
             graph.iterate_edges(|(start, end)| {
                 let start_orbit = get_orbit(&orbits, start);
                 let end_orbit = get_orbit(&orbits, end);
                 if start_orbit != end_orbit {
-                    quotient_graph.add_arc(start_orbit, end_orbit);
+                    quotient_graph
+                        .add_arc(start_orbit, end_orbit)
+                        .expect("Orbits not found in quotient graph!");
                 }
             });
 
             // Edges between orbits might be generated more often than once.
             quotient_graph.minimize();
         } else {
-            quotient_graph.add_vertex(Vertex::new(0, -1));
+            quotient_graph = Graph::new_ordered(1);
+            quotient_graph
+                .set_vertex(Vertex::new(0, -1))
+                .expect("Single vertex could not be added!");
         }
 
         QuotientGraph {
@@ -153,6 +159,69 @@ impl QuotientGraph {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_from_graph_orbits() {
+        let mut graph = Graph::new_ordered(8);
+        assert_eq!(Ok(()), graph.add_edge(0, 1));
+        assert_eq!(Ok(()), graph.add_edge(0, 3));
+        assert_eq!(Ok(()), graph.add_edge(0, 4));
+        assert_eq!(Ok(()), graph.add_edge(1, 2));
+        assert_eq!(Ok(()), graph.add_edge(1, 5));
+        assert_eq!(Ok(()), graph.add_edge(2, 3));
+        assert_eq!(Ok(()), graph.add_edge(2, 6));
+        assert_eq!(Ok(()), graph.add_edge(3, 7));
+        assert_eq!(Ok(()), graph.add_edge(4, 5));
+        assert_eq!(Ok(()), graph.add_edge(4, 7));
+        assert_eq!(Ok(()), graph.add_edge(5, 6));
+        assert_eq!(Ok(()), graph.add_edge(6, 7));
+
+        let orbits = vec![0, 1, 2, 1, 4, 0, 1, 0];
+
+        let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
+        assert_eq!(orbits, quotient.orbits);
+
+        let mut expected_vert0 = Vertex::new(0, -1);
+        expected_vert0.add_edge(1);
+        expected_vert0.add_edge(4);
+        let mut expected_vert1 = Vertex::new(1, -1);
+        expected_vert1.add_edge(0);
+        expected_vert1.add_edge(2);
+        let mut expected_vert2 = Vertex::new(2, -1);
+        expected_vert2.add_edge(1);
+        let mut expected_vert4 = Vertex::new(4, -1);
+        expected_vert4.add_edge(0);
+
+        assert_eq!(4, quotient.quotient_graph.size());
+        assert_eq!(
+            expected_vert0,
+            *quotient.quotient_graph.get_vertex(0).unwrap()
+        );
+        assert_eq!(
+            expected_vert1,
+            *quotient.quotient_graph.get_vertex(1).unwrap()
+        );
+        assert_eq!(
+            expected_vert2,
+            *quotient.quotient_graph.get_vertex(2).unwrap()
+        );
+        assert_eq!(
+            expected_vert4,
+            *quotient.quotient_graph.get_vertex(4).unwrap()
+        );
+
+        // Single orbit
+        let graph = Graph::new_ordered(1);
+        let orbits = vec![0];
+
+        let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
+        assert_eq!(orbits, quotient.orbits);
+        assert_eq!(
+            Vertex::new(0, -1),
+            *quotient.quotient_graph.get_vertex(0).unwrap()
+        );
+        assert_eq!(1, quotient.quotient_graph.size());
+    }
 
     #[test]
     fn test_apply_generator() {

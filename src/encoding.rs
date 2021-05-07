@@ -20,19 +20,32 @@ const MAX_LITERAL: Literal = 2i32.pow(28) - 1;
 /// into a high level view of a SAT formula.
 trait HighLevelEncoding {
     type HighLevelRepresentation;
-    fn encode_high(&self) -> Self::HighLevelRepresentation;
+    fn encode_high(&self, in_quotient: bool) -> Self::HighLevelRepresentation;
 }
 
 trait SATEncoding {
     fn encode_sat(&self, dict: &mut SATEncodingDictionary) -> Formula;
 }
 
-type EdgeEncoding = (VertexIndex, VertexIndex);
+#[derive(Debug, PartialEq, Eq)]
+enum EdgeEncoding {
+    OrbitEdge((VertexIndex, VertexIndex)),
+    VertexEdge((VertexIndex, VertexIndex)),
+}
+
+impl EdgeEncoding {
+    pub fn get_edge(&self) -> &(VertexIndex, VertexIndex) {
+        match self {
+            EdgeEncoding::OrbitEdge(edge) => edge,
+            EdgeEncoding::VertexEdge(edge) => edge,
+        }
+    }
+}
 
 impl HighLevelEncoding for Graph {
     type HighLevelRepresentation = Vec<EdgeEncoding>;
 
-    fn encode_high(&self) -> Self::HighLevelRepresentation {
+    fn encode_high(&self, in_quotient: bool) -> Self::HighLevelRepresentation {
         let mut edges = Vec::new();
 
         self.iterate_edges(|edge| {
@@ -40,6 +53,15 @@ impl HighLevelEncoding for Graph {
         });
 
         edges
+            .into_iter()
+            .map(|edge| {
+                if in_quotient {
+                    EdgeEncoding::OrbitEdge(edge)
+                } else {
+                    EdgeEncoding::VertexEdge(edge)
+                }
+            })
+            .collect()
     }
 }
 
@@ -48,7 +70,7 @@ type OrbitEncoding = (VertexIndex, Vec<VertexIndex>);
 impl HighLevelEncoding for Orbits {
     type HighLevelRepresentation = Vec<OrbitEncoding>;
 
-    fn encode_high(&self) -> Self::HighLevelRepresentation {
+    fn encode_high(&self, _in_quotient: bool) -> Self::HighLevelRepresentation {
         self.iter()
             .enumerate()
             .sorted_by(|(_, orbit_a), (_, orbit_b)| orbit_a.cmp(orbit_b))
@@ -72,11 +94,15 @@ type QuotientGraphEncoding = (Vec<EdgeEncoding>, Vec<OrbitEncoding>);
 impl HighLevelEncoding for QuotientGraph {
     type HighLevelRepresentation = QuotientGraphEncoding;
 
-    fn encode_high(&self) -> Self::HighLevelRepresentation {
-        (self.quotient_graph.encode_high(), self.orbits.encode_high())
+    fn encode_high(&self, _in_quotient: bool) -> Self::HighLevelRepresentation {
+        (
+            self.quotient_graph.encode_high(true),
+            self.orbits.encode_high(true),
+        )
     }
 }
 
+#[derive(Debug)]
 struct SATEncodingDictionary {
     literal_counter: Literal,
     vertex_map: HashMap<VertexIndex, Literal>,
@@ -96,10 +122,24 @@ impl SATEncodingDictionary {
         self.vertex_map.get(vertex).map(|literal_ref| *literal_ref)
     }
 
+    pub fn lookup_orbit(&self, orbit: &VertexIndex) -> Option<Literal> {
+        self.orbit_map.get(orbit).map(|literal_ref| *literal_ref)
+    }
+
     pub fn lookup_edge(&mut self, edge: &EdgeEncoding) -> Option<Literal> {
-        let (start, end) = edge;
-        let start_lit = self.lookup_vertex(start);
-        let end_lit = self.lookup_vertex(end);
+        let start_lit;
+        let end_lit;
+        match edge {
+            EdgeEncoding::OrbitEdge((start, end)) => {
+                start_lit = self.lookup_orbit(start);
+                end_lit = self.lookup_orbit(end);
+            }
+            EdgeEncoding::VertexEdge((start, end)) => {
+                start_lit = self.lookup_vertex(start);
+                end_lit = self.lookup_vertex(end);
+            }
+        };
+
         start_lit
             .zip(end_lit)
             .map(|(start, end)| self.pairing(start, end))
@@ -129,15 +169,25 @@ impl SATEncodingDictionary {
         if let Some(literal) = self.lookup_edge(edge) {
             literal
         } else {
-            let (start, end) = edge;
-            let start_lit = self.lookup_or_add_vertex(start);
-            let end_lit = self.lookup_or_add_vertex(end);
+            let start_lit;
+            let end_lit;
+            match edge {
+                EdgeEncoding::OrbitEdge((start, end)) => {
+                    start_lit = self.lookup_or_add_orbit(start);
+                    end_lit = self.lookup_or_add_orbit(end);
+                }
+                EdgeEncoding::VertexEdge((start, end)) => {
+                    start_lit = self.lookup_or_add_vertex(start);
+                    end_lit = self.lookup_or_add_vertex(end);
+                }
+            }
+
             self.pairing(start_lit, end_lit)
         }
     }
 
     /// This computes the Cantor pairing function for th two given literals.
-    fn pairing(&mut self, first: Literal, second: Literal) -> Literal {
+    fn pairing(&self, first: Literal, second: Literal) -> Literal {
         let pairing_result = (first + second) * (first + second + 1) / 2 + second;
         // The return value must also be a valid literal.
         // Whereas the normally assigned literals grow from 0,
@@ -192,14 +242,13 @@ impl SATEncoding for OrbitEncoding {
 
         // Pairwise mutual exclusion of orbit elements picked by the transversal.
         // Thus AT MOST ONE of these can be true.
-        for orbit_element1 in orbit_element_encodings.iter() {
-            for orbit_element2 in orbit_element_encodings.iter() {
-                if orbit_element1 != orbit_element2 {
-                    // -v1 || -v2; v1!=v2; v1, v2 in the given orbit
-                    formula.push(vec![-orbit_element1, -orbit_element2]);
-                }
-            }
-        }
+        orbit_element_encodings
+            .iter()
+            .combinations(2)
+            .for_each(|encoding_pair| {
+                // -v1 || -v2; v1!=v2; v1, v2 in the given orbit
+                formula.push(vec![-encoding_pair[0], -encoding_pair[1]]);
+            });
 
         // Disjunction of all vertex-in-orbit pairs to encode AT LEAST ONE
         // ---------------------------------------------------------------
@@ -220,7 +269,7 @@ impl SATEncoding for QuotientGraphEncoding {
         let mut formula = Vec::new();
 
         // for all (o1,o2) edges in the quotient graph G\O (i.e. o1, o2 in O)
-        for (start_orbit, end_orbit) in quotient_edges {
+        for (start_orbit, end_orbit) in quotient_edges.iter().map(EdgeEncoding::get_edge) {
             let start_encoding = dict.lookup_or_add_orbit(start_orbit);
             let end_encoding = dict.lookup_or_add_orbit(end_orbit);
             let edge_encoding = dict.pairing(start_encoding, end_encoding);
@@ -287,11 +336,11 @@ pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula 
     let mut dict = SATEncodingDictionary::new();
 
     let mut graph_edges_encoding: Formula = graph
-        .encode_high()
+        .encode_high(false)
         .into_iter()
         .flat_map(|edge| edge.encode_sat(&mut dict))
         .collect();
-    let (quotient_edges, orbits) = quotient_graph.encode_high();
+    let (quotient_edges, orbits) = quotient_graph.encode_high(true);
     let mut quotient_edges_encoding: Formula = quotient_edges
         .iter()
         .flat_map(|edge| edge.encode_sat(&mut dict))
@@ -311,23 +360,198 @@ pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula 
 
 #[cfg(test)]
 mod test {
+    use crate::graph::GraphError;
+
     use super::*;
 
     #[test]
+    fn test_encode_problem() -> Result<(), GraphError> {
+        // 0 -- 1 -- 2 where 0 and 2 are in the same orbit
+        let mut graph = Graph::new_ordered(3);
+        graph.add_arc(0, 1)?;
+        graph.add_arc(2, 1)?;
+        let orbits = vec![0, 1, 0];
+        let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+        let dict = SATEncodingDictionary::new();
+
+        // Expected mappings: vertices: 0->1, 1->2, 2->3, orbits 0->4, 1->5
+        let vert_enc0 = 1;
+        let vert_enc1 = 2;
+        let vert_enc2 = 3;
+        let orb_enc0 = 4;
+        let orb_enc1 = 5;
+
+        let expected_formula = vec![
+            // Graph edges
+            vec![dict.pairing(vert_enc0, vert_enc1)],
+            vec![dict.pairing(vert_enc2, vert_enc1)],
+            //Quotient graph edges
+            vec![dict.pairing(orb_enc0, orb_enc1)],
+            // Transversal for orbit 0
+            // Not both
+            vec![
+                -dict.pairing(orb_enc0, vert_enc0),
+                -dict.pairing(orb_enc0, vert_enc2),
+            ],
+            // Either of these
+            vec![
+                dict.pairing(orb_enc0, vert_enc0),
+                dict.pairing(orb_enc0, vert_enc2),
+            ],
+            // Transversal for orbit 1
+            vec![dict.pairing(orb_enc1, vert_enc1)],
+            // Descriptive constraint
+            vec![
+                -dict.pairing(orb_enc0, orb_enc1),
+                -dict.pairing(orb_enc0, vert_enc0),
+                -dict.pairing(orb_enc1, vert_enc1),
+                dict.pairing(vert_enc0, vert_enc1),
+            ],
+            vec![
+                -dict.pairing(orb_enc0, orb_enc1),
+                -dict.pairing(orb_enc0, vert_enc2),
+                -dict.pairing(orb_enc1, vert_enc1),
+                dict.pairing(vert_enc2, vert_enc1),
+            ],
+        ];
+
+        let formula = encode_problem(&graph, &quotient_graph);
+        assert_eq!(expected_formula, formula);
+        Ok(())
+    }
+
+    #[test]
+    fn test_descriptive_constraint() {
+        let orbit_encoding = vec![(0, vec![0, 1]), (2, vec![2, 3])];
+        let edge_encoding = vec![EdgeEncoding::OrbitEdge((0, 2))];
+        let mut dict = SATEncodingDictionary::new();
+
+        let orb_enc0 = dict.lookup_or_add_orbit(&0);
+        let orb_enc2 = dict.lookup_or_add_orbit(&2);
+
+        let vert_enc0 = dict.lookup_or_add_vertex(&0);
+        let vert_enc1 = dict.lookup_or_add_vertex(&1);
+        let vert_enc2 = dict.lookup_or_add_vertex(&2);
+        let vert_enc3 = dict.lookup_or_add_vertex(&3);
+
+        assert_eq!(1, orb_enc0);
+        assert_eq!(2, orb_enc2);
+        assert_eq!(3, vert_enc0);
+        assert_eq!(4, vert_enc1);
+        assert_eq!(5, vert_enc2);
+        assert_eq!(6, vert_enc3);
+
+        let orbit_edge = dict.pairing(orb_enc0, orb_enc2);
+        let o0v0 = dict.pairing(orb_enc0, vert_enc0);
+        let o0v1 = dict.pairing(orb_enc0, vert_enc1);
+        let o2v2 = dict.pairing(orb_enc2, vert_enc2);
+        let o2v3 = dict.pairing(orb_enc2, vert_enc3);
+        let edge02 = dict.pairing(vert_enc0, vert_enc2);
+        let edge03 = dict.pairing(vert_enc0, vert_enc3);
+        let edge12 = dict.pairing(vert_enc1, vert_enc2);
+        let edge13 = dict.pairing(vert_enc1, vert_enc3);
+
+        let constraint02 = vec![-orbit_edge, -o0v0, -o2v2, edge02];
+        let constraint03 = vec![-orbit_edge, -o0v0, -o2v3, edge03];
+        let constraint12 = vec![-orbit_edge, -o0v1, -o2v2, edge12];
+        let constraint13 = vec![-orbit_edge, -o0v1, -o2v3, edge13];
+
+        let formula = (edge_encoding, orbit_encoding).encode_sat(&mut dict);
+        assert_eq!(4, formula.len());
+        assert!(formula.contains(&constraint02));
+        assert!(formula.contains(&constraint03));
+        assert!(formula.contains(&constraint12));
+        assert!(formula.contains(&constraint13));
+    }
+
+    #[test]
+    fn test_transversal_encoding() {
+        let orbit_encoding = (0, vec![0, 1, 4]);
+        let mut dict = SATEncodingDictionary::new();
+        assert_eq!(1, dict.lookup_or_add_orbit(&0));
+        assert_eq!(2, dict.lookup_or_add_vertex(&0));
+        assert_eq!(3, dict.lookup_or_add_vertex(&1));
+        assert_eq!(4, dict.lookup_or_add_vertex(&4));
+        let pick0 = dict.pairing(1, 2);
+        let pick1 = dict.pairing(1, 3);
+        let pick4 = dict.pairing(1, 4);
+
+        let at_least_one = vec![pick0, pick1, pick4];
+        let at_most_one = vec![
+            vec![-pick0, -pick1],
+            vec![-pick0, -pick4],
+            vec![-pick1, -pick4],
+        ];
+
+        let formula = orbit_encoding.encode_sat(&mut dict);
+        assert_eq!(4, formula.len());
+        assert!(formula.contains(&at_least_one));
+        for mut_ex in at_most_one {
+            assert!(formula.contains(&mut_ex));
+        }
+    }
+
+    #[test]
+    fn dict_vertex_orbits_disjunct() {
+        let mut dict = SATEncodingDictionary::new();
+
+        let vertices = vec![1, 2, 3, 5, 3, 6, 3, 5];
+        let mut vertex_literals = vec![1, 2, 3, 4, 3, 5, 3, 4];
+        assert_eq!(
+            vertex_literals,
+            vertices
+                .iter()
+                .map(|vert| dict.lookup_or_add_vertex(vert))
+                .collect::<Vec<Literal>>()
+        );
+
+        let orbits = vec![0, 2, 5, 3, 2, 9, 0, 2];
+        let mut orbit_literals = vec![6, 7, 8, 9, 7, 10, 6, 7];
+        assert_eq!(
+            orbit_literals,
+            orbits
+                .iter()
+                .map(|orbit| dict.lookup_or_add_orbit(orbit))
+                .collect::<Vec<Literal>>()
+        );
+
+        vertex_literals.append(&mut orbit_literals);
+        let pairs = vertex_literals
+            .iter()
+            .combinations(2)
+            .map(|pairs| dict.pairing(*pairs[0], *pairs[1]))
+            .collect::<Vec<Literal>>();
+        for pair_lit in pairs {
+            vertex_literals.iter().for_each(|lit| {
+                assert_ne!(pair_lit, *lit);
+            });
+        }
+    }
+
+    #[test]
     fn test_encode_graph() {
+        use EdgeEncoding::VertexEdge;
         let mut graph = Graph::new_ordered(4);
-        graph.add_arc(0, 1);
-        graph.add_arc(1, 2);
-        graph.add_arc(2, 3);
-        graph.add_arc(3, 1);
-        let encoded = graph.encode_high();
-        assert_eq!(encoded, vec![(0, 1), (1, 2), (2, 3), (3, 1)]);
+        graph.add_arc(0, 1).unwrap();
+        graph.add_arc(1, 2).unwrap();
+        graph.add_arc(2, 3).unwrap();
+        graph.add_arc(3, 1).unwrap();
+        let encoded = graph.encode_high(false);
+        assert_eq!(
+            encoded,
+            vec![
+                VertexEdge((0, 1)),
+                VertexEdge((1, 2)),
+                VertexEdge((2, 3)),
+                VertexEdge((3, 1))
+            ]
+        );
     }
 
     #[test]
     fn test_encode_orbits() {
         let orbits = vec![0, 1, 2, 0, 2, 1, 0];
-        let encoded = orbits.encode_high();
+        let encoded = orbits.encode_high(true);
         assert_eq!(
             encoded,
             vec![(0, vec![0, 3, 6]), (1, vec![1, 5]), (2, vec![2, 4])]
