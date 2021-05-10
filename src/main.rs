@@ -1,15 +1,15 @@
 #![warn(rust_2018_idioms)]
-#![deny(warnings, missing_docs)]
+//#![deny(warnings, missing_docs)]
 
 //! Project to find heuristics for
 //! descriptive quotients of graphs
 //! for certain conditions.
 
 use itertools::Itertools;
-use std::{error::Error, io};
+use std::{env, io};
 
 mod graph;
-use graph::VertexIndex;
+use graph::{GraphError, VertexIndex};
 
 mod input;
 use input::{read_graph, read_vertex};
@@ -25,16 +25,48 @@ use encoding::encode_problem;
 mod sat_solving;
 use sat_solving::solve;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let stdin = io::stdin();
+mod parser;
+use parser::ParseError;
 
-    // Initialize the graph for a number of vertices ...
-    let mut graph = read_graph(&stdin)?;
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Graph initialisation error")]
+    GraphError(GraphError),
+    #[error("Error while parsing input file with graph description")]
+    ParseError,
+}
 
-    // ..., then read and insert the edges and ...
-    for i in 0..graph.size() {
-        if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
-            break;
+impl<'a> From<GraphError> for Error {
+    fn from(ge: GraphError) -> Self {
+        Self::GraphError(ge)
+    }
+}
+
+impl<'a> From<nom::Err<ParseError<'a>>> for Error {
+    fn from(_: nom::Err<ParseError<'a>>) -> Self {
+        Self::ParseError
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut graph;
+
+    // Either read from a file ...
+    if env::args().len() > 1 {
+        let input_path = env::args().nth(1).expect("usage: dqg FILE");
+        let file = std::fs::read_to_string(&input_path)?;
+        graph = parser::parse_dreadnaut_input(&file)?;
+    } else {
+        let stdin = io::stdin();
+
+        // or initialize the graph for a number of vertices from stdin ...
+        graph = read_graph(&stdin)?;
+
+        // ..., then read and insert the edges and ...
+        for i in 0..graph.size() {
+            if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
+                break;
+            }
         }
     }
 

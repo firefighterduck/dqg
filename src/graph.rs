@@ -18,17 +18,16 @@ enum GraphState {
     ColourGrouped,
     ColourGroupedOrdered,
     Chaos,
+    Fixed,
 }
 
 /// Fixed size graph.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Graph {
     vertices: Vec<Vertex>,
     size: usize,
     #[debug(skip)]
     state: GraphState,
-    #[debug(skip)]
-    keep_state_auto: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,7 +72,6 @@ impl Graph {
             vertices,
             size: n,
             state: GraphState::IndexOrdered,
-            keep_state_auto: true,
         }
     }
 
@@ -86,26 +84,13 @@ impl Graph {
             vertices,
             size: indices.len(),
             state: GraphState::Chaos,
-            keep_state_auto: false,
-        }
-    }
-
-    pub fn _from_colour_list(coloured_vertices: &[Colour]) -> Self {
-        let mut vertices = Vec::with_capacity(coloured_vertices.len());
-        for (index, colour) in coloured_vertices.iter().enumerate() {
-            vertices.push(Vertex::new(index as VertexIndex, *colour));
-        }
-        Graph {
-            vertices,
-            size: coloured_vertices.len(),
-            state: GraphState::Chaos,
-            keep_state_auto: true,
         }
     }
 
     pub fn set_vertex(&mut self, new_vertex: Vertex) -> Result<(), GraphError> {
+        use GraphState::*;
         let index = new_vertex.index;
-        if let GraphState::IndexOrdered = self.state {
+        if self.state == IndexOrdered {
             *self
                 .vertices
                 .get_mut(index as usize)
@@ -116,7 +101,9 @@ impl Graph {
                 .iter_mut()
                 .find(|vertex| vertex.index == index)
                 .ok_or(GraphError(index))? = new_vertex;
-            self.state = GraphState::Chaos;
+            if self.state != Fixed {
+                self.state = Chaos;
+            }
         }
         Ok(())
     }
@@ -177,14 +164,11 @@ impl Graph {
         }
     }
 
-    #[cfg(test)]
     pub fn set_colours(&mut self, colours: &[Colour]) -> Result<(), GraphError> {
         for (index, colour) in colours.iter().enumerate() {
             self.get_vertex_mut(index as VertexIndex)?.colour = *colour;
         }
 
-        self.keep_state_auto = false;
-        self.state = GraphState::ColourGroupedOrdered;
         Ok(())
     }
 
@@ -197,8 +181,7 @@ impl Graph {
         }
 
         self.vertices = ordered_vertices;
-        self.keep_state_auto = false;
-        self.state = GraphState::IndexOrdered;
+        self.state = GraphState::Fixed;
         Ok(())
     }
 
@@ -235,7 +218,7 @@ impl Graph {
             partition: Vec::with_capacity(n),
         };
 
-        if self.keep_state_auto {
+        if self.state != GraphState::Fixed {
             self.sort();
             self.group_colours();
         }
@@ -409,11 +392,12 @@ mod test {
         graph.add_edge(6, 7)?;
 
         let order = [2, 0, 1, 3, 4, 5, 6, 7];
-        let colours = [1, 2, 2, 2, 2, 2, 2, 2];
-        graph.order(&order)?;
+        let colours = [2, 2, 1, 2, 2, 2, 2, 2];
         graph.set_colours(&colours)?;
+        graph.order(&order)?;
 
         let mut nauty_graph = graph.prepare_nauty();
+        println!("{:?}", graph.state);
         assert_eq!(nauty_graph.vertex_order, order);
         assert_eq!(nauty_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
         assert!(nauty_graph.check_valid());
