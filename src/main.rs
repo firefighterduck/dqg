@@ -6,6 +6,7 @@
 //! for certain conditions.
 
 use itertools::Itertools;
+use rayon::prelude::*;
 use std::{env, io};
 
 mod graph;
@@ -26,7 +27,7 @@ mod sat_solving;
 use sat_solving::solve;
 
 mod parser;
-use parser::ParseError;
+use parser::{parse_dreadnaut_input, ParseError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -55,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().len() > 1 {
         let input_path = env::args().nth(1).expect("usage: dqg FILE");
         let file = std::fs::read_to_string(&input_path)?;
-        graph = parser::parse_dreadnaut_input(&file)?;
+        graph = parse_dreadnaut_input(&file)?;
     } else {
         let stdin = io::stdin();
 
@@ -83,7 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // ... iterate over all possible subsets of generators.
-    generators.into_iter().powerset().skip(1).for_each(f);
+    let generator_sets: Vec<Vec<Vec<i32>>> = generators.into_iter().powerset().collect();
+    generator_sets.into_par_iter().skip(1).for_each(f);
 
     Ok(())
 }
