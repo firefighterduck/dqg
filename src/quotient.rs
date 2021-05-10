@@ -9,13 +9,13 @@ use std::{os::raw::c_int, slice::from_raw_parts};
 
 use crate::graph::{Graph, NautyGraph, Vertex, VertexIndex};
 
-pub type Generators = Vec<Vec<VertexIndex>>;
+pub type Generator = Vec<VertexIndex>;
 pub type Orbits = Vec<VertexIndex>;
 
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
-pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Generators {
+pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Generator> {
     let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();
 
@@ -94,7 +94,7 @@ fn get_orbit(orbits: &Orbits, vertex: VertexIndex) -> VertexIndex {
 }
 
 // Generate the orbits of a quotient graph from the generators of the original graph.
-pub fn generate_orbits(generators: &mut Generators) -> Orbits {
+pub fn generate_orbits(generators: &mut [Generator]) -> Orbits {
     let number_of_vertices = generators
         .get(0)
         .expect("Empty subset can't be used to generate orbits")

@@ -5,9 +5,7 @@
 //! descriptive quotients of graphs
 //! for certain conditions.
 
-use itertools::Itertools;
-use rayon::prelude::*;
-use std::{env, io};
+use std::{env, io, sync::Arc};
 
 mod graph;
 use graph::{GraphError, VertexIndex};
@@ -15,7 +13,8 @@ use graph::{GraphError, VertexIndex};
 mod input;
 use input::{read_graph, read_vertex};
 
-// mod combinatoric; unused for now, may be helpful for increasing performance lateron
+mod combinatoric;
+use combinatoric::iterate_powerset;
 
 mod quotient;
 use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
@@ -75,17 +74,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nauty_graph = graph.prepare_nauty();
     assert!(nauty_graph.check_valid());
     let generators = compute_generators_with_nauty(nauty_graph);
+    println!("{:?} generators", generators.len());
 
-    let f = |mut subset| {
-        let orbits = generate_orbits(&mut subset);
-        let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let formula = encode_problem(&graph, &quotient_graph);
-        println!("Quotient is descriptive?: {}", solve(formula));
+    let graph_arc = Arc::new(&graph);
+
+    let f = |subset: &mut [Vec<VertexIndex>]| {
+        //println!("For subset {:?}", subset);
+        let orbits = generate_orbits(subset);
+        //println!("For subset {:?} with orbits {:?}", subset, orbits);
+        let quotient_graph = QuotientGraph::from_graph_orbits(&graph_arc, orbits);
+        let formula = encode_problem(&graph_arc, &quotient_graph);
+        //println!("Resulting quotient graph {:?}", quotient_graph);
+        if !solve(formula) {
+            println!("Found a non-descriptive quotient!");
+        }
     };
 
     // ... iterate over all possible subsets of generators.
-    let generator_sets: Vec<Vec<Vec<i32>>> = generators.into_iter().powerset().collect();
-    generator_sets.into_par_iter().skip(1).for_each(f);
+    iterate_powerset(generators, f);
 
     Ok(())
 }
