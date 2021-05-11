@@ -90,7 +90,7 @@ fn empty_orbits(number_vertices: usize) -> Orbits {
     orbits
 }
 
-fn get_orbit(orbits: &Orbits, vertex: VertexIndex) -> VertexIndex {
+fn get_orbit(orbits: &[VertexIndex], vertex: VertexIndex) -> VertexIndex {
     *orbits
         .get(vertex as usize)
         .expect("Vertex not part of given orbits!")

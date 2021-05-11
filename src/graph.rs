@@ -37,6 +37,7 @@ pub struct Vertex {
     pub colour: Colour,
 }
 
+#[allow(clippy::ptr_arg)]
 #[cfg(not(tarpaulin_include))]
 pub fn bin_fmt(vec: &Vec<u64>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{{")?;
