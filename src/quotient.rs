@@ -15,6 +15,7 @@ pub type Orbits = Vec<VertexIndex>;
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
+#[cfg(not(tarpaulin_include))]
 pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Generator> {
     let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();

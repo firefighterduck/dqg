@@ -37,6 +37,7 @@ pub struct Vertex {
     pub colour: Colour,
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn bin_fmt(vec: &Vec<u64>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{{")?;
     for number in vec {
@@ -238,7 +239,7 @@ impl Graph {
             }
         }
 
-        let mut last_colour = -1;
+        let mut last_colour = -2; // -1 is standard for not set and other negative numbers can not arise.
         for colour in nauty_graph.partition.iter_mut().rev() {
             if *colour != last_colour {
                 last_colour = *colour;
@@ -401,6 +402,7 @@ mod test {
         assert_eq!(nauty_graph.vertex_order, order);
         assert_eq!(nauty_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
         assert!(nauty_graph.check_valid());
+        assert_eq!(nauty_graph.graph_repr_sizes(), (8, 1));
 
         let mut options = optionblk::default();
         options.writeautoms = FALSE;
@@ -423,6 +425,53 @@ mod test {
         }
 
         assert_eq!(orbits, [0, 1, 2, 1, 4, 0, 1, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn correct_nauty_repr2() -> Result<(), GraphError> {
+        let mut graph = Graph::new_ordered(8);
+        graph.add_edge(0, 1)?;
+        graph.add_edge(0, 3)?;
+        graph.add_edge(0, 4)?;
+        graph.add_edge(1, 2)?;
+        graph.add_edge(1, 5)?;
+        graph.add_edge(2, 3)?;
+        graph.add_edge(2, 6)?;
+        graph.add_edge(3, 7)?;
+        graph.add_edge(4, 5)?;
+        graph.add_edge(4, 7)?;
+        graph.add_edge(5, 6)?;
+        graph.add_edge(6, 7)?;
+
+        let mut nauty_graph = graph.prepare_nauty();
+        println!("{:?}", graph.state);
+        assert_eq!(nauty_graph.vertex_order, [0, 1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(nauty_graph.partition, [1, 1, 1, 1, 1, 1, 1, 0]);
+        assert!(nauty_graph.check_valid());
+        assert_eq!(nauty_graph.graph_repr_sizes(), (8, 1));
+
+        let mut options = optionblk::default();
+        options.writeautoms = FALSE;
+        options.defaultptn = FALSE;
+        let mut stats = statsblk::default();
+        let mut orbits = vec![0; 8];
+
+        unsafe {
+            densenauty(
+                nauty_graph.adjacency_matrix.as_mut_ptr(),
+                nauty_graph.vertex_order.as_mut_ptr(),
+                nauty_graph.partition.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                1,
+                8,
+                std::ptr::null_mut(),
+            );
+        }
+
+        assert_eq!(orbits, [0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
 }

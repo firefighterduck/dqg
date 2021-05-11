@@ -6,6 +6,7 @@ use std::io::{self, Stdin, Write};
 
 use crate::graph::{Graph, VertexIndex};
 
+#[cfg(not(tarpaulin_include))]
 pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
     let mut buffer = String::new();
     let number_of_vertices;
@@ -30,6 +31,7 @@ pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
     Ok(Graph::new_ordered(number_of_vertices))
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn read_vertex(
     index: VertexIndex,
     graph: &mut Graph,

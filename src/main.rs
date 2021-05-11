@@ -37,17 +37,20 @@ pub enum Error {
 }
 
 impl<'a> From<GraphError> for Error {
+    #[cfg(not(tarpaulin_include))]
     fn from(ge: GraphError) -> Self {
         Self::GraphError(ge)
     }
 }
 
 impl<'a> From<nom::Err<ParseError<'a>>> for Error {
+    #[cfg(not(tarpaulin_include))]
     fn from(_: nom::Err<ParseError<'a>>) -> Self {
         Self::ParseError
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut graph;
 
