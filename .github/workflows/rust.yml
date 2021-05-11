@@ -1,0 +1,88 @@
+name: Rust
+
+on: [push]
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Install nauty
+        run: sudo apt-get install nauty libnauty2-dev -y
+
+      - name: Run cargo-about
+        run:  cargo install cargo-about && 
+              cargo about init &&
+              cargo about generate about.hbs > licenses.html
+
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
+
+  test:
+    name: Test with coverage
+    runs-on:  ubuntu-latest
+    container:
+      image: xd009642/tarpaulin
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install libclang for bindgen
+        run:  apt-get update && apt-get install llvm-dev libclang-dev clang -y
+        
+      - name: Install nauty
+        run:  apt-get install nauty libnauty2-dev -y
+
+      - name: Run tests with tarpaulin
+        run:  cargo tarpaulin --avoid-cfg-tarpaulin --verbose
+
+  flamegraph:
+    name: Flamegraph generation
+    runs-on:  ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install flamegraph
+        run:  cargo install flamegraph
+
+      - name: Fix settings
+        run:  echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - name: Install nauty
+        run: sudo apt-get install nauty libnauty2-dev -y
+
+      - name: Use flamegraph
+        run: cargo flamegraph -c "record -F 997 --call-graph dwarf -g -o ./perf.dataa" ./example.dre
