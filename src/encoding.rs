@@ -119,11 +119,11 @@ impl SATEncodingDictionary {
     }
 
     pub fn lookup_vertex(&self, vertex: &VertexIndex) -> Option<Literal> {
-        self.vertex_map.get(vertex).map(|literal_ref| *literal_ref)
+        self.vertex_map.get(vertex).copied()
     }
 
     pub fn lookup_orbit(&self, orbit: &VertexIndex) -> Option<Literal> {
-        self.orbit_map.get(orbit).map(|literal_ref| *literal_ref)
+        self.orbit_map.get(orbit).copied()
     }
 
     pub fn lookup_edge(&mut self, edge: &EdgeEncoding) -> Option<Literal> {

@@ -14,7 +14,7 @@ pub type ParseResult<'a, O> = nom::IResult<Input<'a>, O, ParseError<'a>>;
 /// The used graph generation tool writes always this header first.
 /// This only encodes that Traces should print out information which
 /// this tool doesn't need due to it using nauty/Traces as a library.
-fn parse_header<'a>(input: Input<'a>) -> ParseResult<'a, ()> {
+fn parse_header(input: Input<'_>) -> ParseResult<'_, ()> {
     use nom::{
         bytes::complete::tag, character::complete::line_ending, error::context, sequence::tuple,
     };
@@ -37,7 +37,7 @@ fn parse_header<'a>(input: Input<'a>) -> ParseResult<'a, ()> {
 }
 
 /// Parse the start line for th graph that contains the size.
-fn parse_graph_size<'a>(input: Input<'a>) -> ParseResult<'a, usize> {
+fn parse_graph_size(input: Input<'_>) -> ParseResult<'_, usize> {
     use nom::{
         bytes::complete::tag,
         character::complete::{digit1, line_ending},
@@ -54,16 +54,16 @@ fn parse_graph_size<'a>(input: Input<'a>) -> ParseResult<'a, usize> {
 }
 
 /// Parse a single vertex index.
-fn parse_vertex_index<'a>(input: Input<'a>) -> ParseResult<'a, VertexIndex> {
+fn parse_vertex_index(input: Input<'_>) -> ParseResult<'_, VertexIndex> {
     use nom::{character::complete::digit1, combinator::map};
     map(digit1, |index_str: &str| index_str.parse().unwrap())(input)
 }
 
 /// Parse the edges from vertex s from `s:e1 e2 e3 ... en`.
-fn parse_vertex_edges<'a>(
+fn parse_vertex_edges(
     graph_size: usize,
-    input: Input<'a>,
-) -> ParseResult<'a, (VertexIndex, Vec<VertexIndex>)> {
+    input: Input<'_>,
+) -> ParseResult<'_, (VertexIndex, Vec<VertexIndex>)> {
     use nom::{
         bytes::complete::tag, character::complete::space1, combinator::verify, error::context,
         multi::separated_list1,
@@ -87,7 +87,7 @@ fn parse_vertex_edges<'a>(
 
 /// Parse the end of a egde line which determines
 /// if the edge_lines stop early (`.`) or continues (`;`).
-fn parse_continue_after_edge_line<'a>(input: Input<'a>) -> ParseResult<'a, bool> {
+fn parse_continue_after_edge_line(input: Input<'_>) -> ParseResult<'_, bool> {
     use nom::{
         branch::alt,
         bytes::complete::tag,
@@ -107,7 +107,7 @@ fn parse_continue_after_edge_line<'a>(input: Input<'a>) -> ParseResult<'a, bool>
 /// `f=[c11,c12.c13,...c1n|c21,c22,...c2m|...|cp1,cp2,...,cpk]`
 /// Not specified vertices stay in colour -1.
 /// Also checks, that there is nothing of relevance after the colouring.
-fn parse_colouring<'a>(graph_size: usize, input: Input<'a>) -> ParseResult<'a, Vec<Colour>> {
+fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<Colour>> {
     use nom::{
         bytes::complete::tag,
         character::complete::{multispace1, space0},
@@ -138,7 +138,7 @@ fn parse_colouring<'a>(graph_size: usize, input: Input<'a>) -> ParseResult<'a, V
     Ok((rest, colours))
 }
 
-pub fn parse_dreadnaut_input<'a>(input: Input<'a>) -> Result<Graph, Error> {
+pub fn parse_dreadnaut_input(input: Input<'_>) -> Result<Graph, Error> {
     let (input, _) = parse_header(input)?;
     let (mut input, graph_size) = parse_graph_size(input)?;
     let mut graph = Graph::new_ordered(graph_size);

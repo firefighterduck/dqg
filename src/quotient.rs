@@ -4,7 +4,7 @@
 use custom_debug_derive::Debug;
 use itertools::Itertools;
 use libffi::high::ClosureMut6;
-use nauty_Traces_sys::{densenauty, optionblk, orbjoin, statsblk};
+use nauty_Traces_sys::{densenauty, orbjoin, statsblk};
 use std::{os::raw::c_int, slice::from_raw_parts};
 
 use crate::graph::{Graph, NautyGraph, Vertex, VertexIndex};
@@ -35,10 +35,12 @@ pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Generat
             };
         let userautomproc = ClosureMut6::new(&mut userautomproc);
 
-        let mut options = optionblk::default();
-        options.userautomproc = Some(*userautomproc.code_ptr());
+        let mut options = nauty_Traces_sys::optionstruct {
+            userautomproc: Some(*userautomproc.code_ptr()),
+            ..Default::default()
+        };
         let mut stats = statsblk::default();
-        let mut orbits = vec![0 as c_int; n];
+        let mut orbits = vec![0_i32; n];
 
         // Safety: Call to nauty library function that computes
         // the automorphism group generator through useratomproc.
@@ -122,7 +124,7 @@ impl QuotientGraph {
     /// Generates the quotient graph where each orbit is represented
     /// by the vertex with the smallest index in the orbit.
     pub fn from_graph_orbits(graph: &Graph, orbits: Orbits) -> Self {
-        let unique_orbits: Vec<VertexIndex> = orbits.iter().unique().map(|v| v.clone()).collect();
+        let unique_orbits: Vec<VertexIndex> = orbits.iter().unique().copied().collect();
         let mut quotient_graph;
 
         // We don't need to search for edges if there can't be any.

@@ -159,7 +159,7 @@ impl Graph {
     /// Does so by first sorting, thus trading runtime for reduced memory footprint.
     pub fn minimize(&mut self) {
         for vertex in self.vertices.iter_mut() {
-            vertex.edges_to.sort();
+            vertex.edges_to.sort_unstable();
             vertex.edges_to.dedup();
         }
     }
