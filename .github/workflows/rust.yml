@@ -43,6 +43,12 @@ jobs:
           command: clippy
           args: -- -D warnings
 
+      - name: Upload licenses.html
+        uses: actions/upload-artifact@v2
+        with:
+          name: about-licenses
+          path: ./licenses.html
+
   test:
     name: Test with coverage
     runs-on:  ubuntu-latest
@@ -66,7 +72,13 @@ jobs:
         run:  apt-get install nauty libnauty2-dev -y
 
       - name: Run tests with tarpaulin
-        run:  cargo tarpaulin --avoid-cfg-tarpaulin --verbose
+        run:  cargo tarpaulin --avoid-cfg-tarpaulin --verbose --out Html
+
+      - name: Upload tarpaulin-report.html
+        uses: actions/upload-artifact@v2
+        with:
+          name: tarpaulin-report
+          path: ./tarpaulin-report.html
 
   flamegraph:
     name: Flamegraph generation
@@ -86,3 +98,57 @@ jobs:
 
       - name: Use flamegraph
         run: cargo flamegraph -c "record -F 997 --call-graph dwarf -g -o ./perf.dataa" ./example.dre
+
+      - name: Upload flamegraph.svg
+        uses: actions/upload-artifact@v2
+        with:
+          name: flamegraph
+          path: ./flamegraph.svg
+
+  publish-pages:
+    name: Publish to pages
+    runs-on: ubuntu-latest
+    needs: [check, test, flamegraph]
+    steps:
+      - name: Download licenses.html
+        uses: actions/download-artifact@v2
+        with:
+          name: about-licenses
+          path: public
+
+      - name: Download tarpaulin-report.html
+        uses: actions/download-artifact@v2
+        with:
+          name: tarpaulin-report
+          path: public
+
+      - name: Download flamegraph.svg
+        uses: actions/download-artifact@v2
+        with:
+          name: flamegraph
+          path: public
+
+      - name: Generate index.html
+        run: |
+            cat > public/index.html <<EOL
+              <!doctype html>
+              <html>
+                <head>
+                  <title>Descriptive Quotient Graphs Working Repository Status</title>
+                </head>
+                <body>
+                  <p> <a href="./licenses.html">Licenses</a> </p>
+                  <p> <a href="./tarpaulin-report.html">Test Coverage</a> </p>
+                  <p> <a href="./flamegraph.svg">Flamegraph</a> </p>
+                </body>
+              </html>
+            EOL
+      
+      - name: Deploy to Github Pages
+        if: success()
+        uses: crazy-max/ghaction-github-pages@v2
+        with:
+          target_branch: gh-pages
+          build_dir: public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
