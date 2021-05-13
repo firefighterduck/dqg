@@ -385,46 +385,38 @@ mod test {
         graph.add_arc(2, 1)?;
         let orbits = vec![0, 1, 0];
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let mut dict = SATEncodingDictionary::new();
-
-        // Expected mappings: vertices: 0->1, 1->2, 2->3, orbits 0->4, 1->5
-        let vert_enc0 = 1;
-        let vert_enc1 = 2;
-        let vert_enc2 = 3;
-        let orb_enc0 = 4;
-        let orb_enc1 = 5;
 
         let expected_formula = vec![
             // Graph edges
-            vec![dict.pairing(vert_enc0, vert_enc1)],
-            vec![dict.pairing(vert_enc2, vert_enc1)],
+            vec![1], // v0,v1
+            vec![2], // v2,v1
             //Quotient graph edges
-            vec![dict.pairing(orb_enc0, orb_enc1)],
+            vec![3], // o0,o1
             // Transversal for orbit 0
             // Not both
             vec![
-                -dict.pairing(orb_enc0, vert_enc0),
-                -dict.pairing(orb_enc0, vert_enc2),
+                -4, // o0,v0
+                -5, // o0,v2
             ],
             // Either of these
             vec![
-                dict.pairing(orb_enc0, vert_enc0),
-                dict.pairing(orb_enc0, vert_enc2),
+                4, // o0,v0
+                5, // o0,v2
             ],
             // Transversal for orbit 1
-            vec![dict.pairing(orb_enc1, vert_enc1)],
+            vec![6], // o1,v1
             // Descriptive constraint
             vec![
-                -dict.pairing(orb_enc0, orb_enc1),
-                -dict.pairing(orb_enc0, vert_enc0),
-                -dict.pairing(orb_enc1, vert_enc1),
-                dict.pairing(vert_enc0, vert_enc1),
+                -3, // o0,o1
+                -4, // o0,v0
+                -6, // o1,v1
+                1,  // v0,v1
             ],
             vec![
-                -dict.pairing(orb_enc0, orb_enc1),
-                -dict.pairing(orb_enc0, vert_enc2),
-                -dict.pairing(orb_enc1, vert_enc1),
-                dict.pairing(vert_enc2, vert_enc1),
+                -3, // o0,o1
+                -5, // o0,v2
+                -6, // o1,v1
+                2,  // v2,v1
             ],
         ];
 
@@ -536,7 +528,9 @@ mod test {
             .dedup()
             .combinations(2)
             .map(|pairs| dict.pairing(*pairs[0], *pairs[1]))
-            .all(move |pair_lit| unique_checker.insert(pair_lit)));
+            .all(move |pair_lit| pair_lit > 0
+                && pair_lit < MAX_LITERAL
+                && unique_checker.insert(pair_lit)));
     }
 
     #[test]
