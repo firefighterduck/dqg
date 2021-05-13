@@ -104,17 +104,21 @@ impl HighLevelEncoding for QuotientGraph {
 
 #[derive(Debug)]
 struct SATEncodingDictionary {
-    literal_counter: Literal,
+    literal_in_counter: Literal,
+    literal_out_counter: Literal,
     vertex_map: HashMap<VertexIndex, Literal>,
     orbit_map: HashMap<VertexIndex, Literal>,
+    literal_map: HashMap<Literal, Literal>,
 }
 
 impl SATEncodingDictionary {
     pub fn new() -> Self {
         SATEncodingDictionary {
-            literal_counter: 1,
+            literal_in_counter: 1,
+            literal_out_counter: 1,
             vertex_map: HashMap::new(),
             orbit_map: HashMap::new(),
+            literal_map: HashMap::new(),
         }
     }
 
@@ -149,7 +153,7 @@ impl SATEncodingDictionary {
         if let Some(literal) = self.vertex_map.get(vertex) {
             *literal
         } else {
-            let new_lit = self.get_new_literal();
+            let new_lit = self.get_new_literal_in();
             self.vertex_map.insert(*vertex, new_lit);
             new_lit
         }
@@ -159,7 +163,7 @@ impl SATEncodingDictionary {
         if let Some(literal) = self.orbit_map.get(orbit) {
             *literal
         } else {
-            let new_lit = self.get_new_literal();
+            let new_lit = self.get_new_literal_in();
             self.orbit_map.insert(*orbit, new_lit);
             new_lit
         }
@@ -186,25 +190,32 @@ impl SATEncodingDictionary {
         }
     }
 
-    /// This computes the Cantor pairing function for th two given literals.
-    fn pairing(&self, first: Literal, second: Literal) -> Literal {
+    /// This computes the Cantor pairing function for two given literals.
+    fn pairing(&mut self, first: Literal, second: Literal) -> Literal {
         let pairing_result = (first + second) * (first + second + 1) / 2 + second;
-        // The return value must also be a valid literal.
-        // Whereas the normally assigned literals grow from 0,
-        // the paired ones grow from the positive max value to reduce collisions.
-        // For some reason or other, the max literal for Kissat
-        // is 2^28-1. Thus, this is used.
-        assert!(
-            self.literal_counter < MAX_LITERAL - pairing_result,
-            "SAT vertex variable space and pair variable space intersect!"
-        );
 
-        MAX_LITERAL - pairing_result
+        if let Some(literal) = self.literal_map.get(&pairing_result) {
+            *literal
+        } else {
+            let literal = self.get_new_literal_out();
+            self.literal_map.insert(pairing_result, literal);
+            literal
+        }
     }
 
-    fn get_new_literal(&mut self) -> Literal {
-        let new_literal = self.literal_counter;
-        self.literal_counter += 1;
+    fn get_new_literal_in(&mut self) -> Literal {
+        let new_literal = self.literal_in_counter;
+        self.literal_in_counter += 1;
+        new_literal
+    }
+
+    fn get_new_literal_out(&mut self) -> Literal {
+        let new_literal = self.literal_out_counter;
+
+        // Kissat doesn't allow variables over 2^28-1.
+        assert!(new_literal < MAX_LITERAL);
+
+        self.literal_out_counter += 1;
         new_literal
     }
 }
@@ -360,6 +371,8 @@ pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula 
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+
     use crate::graph::GraphError;
 
     use super::*;
@@ -372,7 +385,7 @@ mod test {
         graph.add_arc(2, 1)?;
         let orbits = vec![0, 1, 0];
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let dict = SATEncodingDictionary::new();
+        let mut dict = SATEncodingDictionary::new();
 
         // Expected mappings: vertices: 0->1, 1->2, 2->3, orbits 0->4, 1->5
         let vert_enc0 = 1;
@@ -516,16 +529,14 @@ mod test {
         );
 
         vertex_literals.append(&mut orbit_literals);
-        let pairs = vertex_literals
+        let mut unique_checker = HashSet::new();
+        assert!(vertex_literals
             .iter()
+            .sorted()
+            .dedup()
             .combinations(2)
             .map(|pairs| dict.pairing(*pairs[0], *pairs[1]))
-            .collect::<Vec<Literal>>();
-        for pair_lit in pairs {
-            vertex_literals.iter().for_each(|lit| {
-                assert_ne!(pair_lit, *lit);
-            });
-        }
+            .all(move |pair_lit| unique_checker.insert(pair_lit)));
     }
 
     #[test]
