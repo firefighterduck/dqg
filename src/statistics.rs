@@ -1,11 +1,29 @@
+use crate::graph::VertexIndex;
+use itertools::{Itertools, MinMaxResult};
 use std::time::{Duration, Instant, SystemTime};
 
 #[derive(Debug)]
-struct QuotientStatistics {
-    qutoient_size: usize,
-    max_orbit_size: usize,
-    min_orbit_size: usize,
-    formula_size: usize,
+pub struct QuotientStatistics {
+    pub quotient_size: usize,
+    pub max_orbit_size: usize,
+    pub min_orbit_size: usize,
+    pub formula_size: usize,
+    pub descriptive: bool,
+}
+
+impl QuotientStatistics {
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_orbit_sizes(orbits: &[VertexIndex]) -> (usize, usize) {
+        let mut counter = vec![0usize; orbits.len()];
+        orbits
+            .iter()
+            .for_each(|orbit| counter[*orbit as usize] += 1);
+        match counter.iter().filter(|size| **size > 0).minmax() {
+            MinMaxResult::NoElements => (0, 0),
+            MinMaxResult::OneElement(m) => (*m, *m),
+            MinMaxResult::MinMax(min, max) => (*min, *max),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -20,6 +38,10 @@ pub struct Statistics {
     // Graph statistics
     graph_size: usize,
     number_of_generators: Option<usize>,
+    max_orbit_size: usize,
+    max_quotient_graph_size: usize,
+    max_formula_size: usize,
+    #[cfg(feature = "full-statistics")]
     quotient_statistics: Vec<QuotientStatistics>,
 }
 
@@ -35,6 +57,10 @@ impl Statistics {
             end_time_sys: None,
             graph_size,
             number_of_generators: None,
+            max_orbit_size: 0,
+            max_quotient_graph_size: 0,
+            max_formula_size: 0,
+            #[cfg(feature = "full-statistics")]
             quotient_statistics: Vec::new(),
         }
     }
@@ -54,5 +80,16 @@ impl Statistics {
     #[cfg(not(tarpaulin_include))]
     pub fn log_number_of_generators(&mut self, number_of_generators: usize) {
         self.number_of_generators = Some(number_of_generators);
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_quotient_statistic(&mut self, quotient_statistic: QuotientStatistics) {
+        self.max_orbit_size = self.max_orbit_size.max(quotient_statistic.max_orbit_size);
+        self.max_quotient_graph_size = self
+            .max_quotient_graph_size
+            .max(quotient_statistic.quotient_size);
+        self.max_formula_size = self.max_formula_size.max(quotient_statistic.formula_size);
+        #[cfg(feature = "full-statistics")]
+        self.quotient_statistics.push(quotient_statistic);
     }
 }

@@ -10,10 +10,12 @@ fn is_active(n: usize, index: usize) -> bool {
     (n & (1 << index)) > 0
 }
 
-pub fn iterate_powerset<T, F>(set: Vec<T>, f: F)
+pub fn iterate_powerset<T, F, P, PGen>(set: Vec<T>, f: F, p: PGen)
 where
     T: Clone + Sync,
-    F: FnOnce(&mut [T]) + Send + Sync + Copy,
+    F: FnOnce(&mut [T], P) + Send + Sync + Copy,
+    PGen: FnOnce() -> P + Send + Sync + Copy,
+    P: Clone + Sync + Send,
 {
     let number_of_elements = set.len();
 
@@ -28,7 +30,8 @@ where
     // If `elements_numbers` would be bigger than 64 we would run into trouble here:
     (1..(2usize.pow(number_of_elements as u32)))
         .into_par_iter()
-        .for_each(move |counter| {
+        .map(|counter| -> (usize, P, Arc<&Vec<T>>) { (counter, p(), arc_set.clone()) })
+        .for_each(move |(counter, parameters, arc_set)| {
             let mut subset = Vec::with_capacity(number_of_elements);
             for element_index in 0..number_of_elements {
                 if is_active(counter, element_index) {
@@ -36,7 +39,7 @@ where
                 }
             }
 
-            f(&mut subset);
+            f(&mut subset, parameters);
         });
 }
 
@@ -63,13 +66,13 @@ mod test {
     #[test]
     fn test_iterate() {
         let set: Vec<i32> = vec![1, 2];
-        let f = |xs: &mut [i32]| {
+        let f = |xs: &mut [i32], _: ()| {
             println!("{:?}", xs);
             for x in xs[..].iter() {
                 assert!(*x > 0);
             }
         };
 
-        iterate_powerset(set, f);
+        iterate_powerset(set, f, move || ());
     }
 }

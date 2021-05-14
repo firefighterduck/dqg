@@ -13,8 +13,11 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(feature = "statistics")]
+use std::sync::Mutex;
+
 mod graph;
-use graph::{GraphError, VertexIndex};
+use graph::{Graph, GraphError, VertexIndex};
 
 mod input;
 use input::{read_graph, read_vertex};
@@ -37,7 +40,7 @@ use parser::{parse_dreadnaut_input, ParseError};
 #[cfg(feature = "statistics")]
 mod statistics;
 #[cfg(feature = "statistics")]
-use statistics::Statistics;
+use statistics::{QuotientStatistics, Statistics};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -59,6 +62,38 @@ impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     fn from(_: nom::Err<ParseError<'a>>) -> Self {
         Self::ParseError
     }
+}
+
+#[cfg(not(tarpaulin_include))]
+fn compute_quotient(
+    generators_subset: &mut [Vec<VertexIndex>],
+    #[cfg(feature = "statistics")] params: (Arc<Graph>, Arc<Mutex<Statistics>>),
+    #[cfg(not(feature = "statistics"))] params: (Arc<Graph>, ()),
+) {
+    let orbits = generate_orbits(generators_subset);
+    #[cfg(feature = "statistics")]
+    let (min_orbit_size, max_orbit_size) = QuotientStatistics::log_orbit_sizes(&orbits);
+
+    let quotient_graph = QuotientGraph::from_graph_orbits(&params.0, orbits);
+    #[cfg(feature = "statistics")]
+    let quotient_size = quotient_graph.quotient_graph.size();
+
+    let formula = encode_problem(&params.0, &quotient_graph);
+    #[cfg(feature = "statistics")]
+    let formula_size = formula.len();
+    let _descriptive = solve(formula);
+
+    #[cfg(feature = "statistics")]
+    if let Ok(mut statistics) = params.1.lock() {
+        let quotient_stats = QuotientStatistics {
+            max_orbit_size,
+            min_orbit_size,
+            quotient_size,
+            formula_size,
+            descriptive: _descriptive,
+        };
+        statistics.log_quotient_statistic(quotient_stats);
+    };
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -98,37 +133,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
+    assert!(nauty_graph.check_valid());
+    let generators = compute_generators_with_nauty(nauty_graph);
     #[cfg(feature = "statistics")]
     statistics.log_nauty_done();
-    assert!(nauty_graph.check_valid());
-
-    let generators = compute_generators_with_nauty(nauty_graph);
     #[cfg(feature = "statistics")]
     statistics.log_number_of_generators(generators.len());
 
-    let graph_arc = Arc::new(&graph);
+    if generators.len() > 20 {
+        println!("Nope {}", generators.len());
+        return Ok(());
+    }
 
-    let f = |subset: &mut [Vec<VertexIndex>]| {
-        //println!("For subset {:?}", subset);
-        let orbits = generate_orbits(subset);
-        //println!("For subset {:?} with orbits {:?}", subset, orbits);
-        let quotient_graph = QuotientGraph::from_graph_orbits(&graph_arc, orbits);
-        let formula = encode_problem(&graph_arc, &quotient_graph);
-        //println!("Resulting quotient graph {:?}", quotient_graph);
-        if !solve(formula) {
-            println!("Found a non-descriptive quotient!");
-        }
+    #[cfg(feature = "statistics")]
+    let statistics_arc = Arc::new(Mutex::new(statistics));
+    let graph_arc = Arc::new(graph);
+    let parameter_generator = || {
+        (
+            Arc::clone(&graph_arc),
+            #[cfg(feature = "statistics")]
+            Arc::clone(&statistics_arc),
+            #[cfg(not(feature = "statistics"))]
+            (),
+        )
     };
 
     // ... iterate over all possible subsets of generators.
-    iterate_powerset(generators, f);
-
-    #[cfg(feature = "statistics")]
-    statistics.log_end();
-
+    iterate_powerset(generators, compute_quotient, parameter_generator);
     let mut statistics_file = File::create(statistics_path)?;
+
     #[cfg(feature = "statistics")]
-    write!(statistics_file, "{:#?}", statistics)?;
+    {
+        let mut statistics = statistics_arc.lock().unwrap();
+        statistics.log_end();
+
+        write!(statistics_file, "{:#?}", statistics)?;
+    }
     #[cfg(not(feature = "statistics"))]
     write!(statistics_file, "Statistics disabled!")?;
 

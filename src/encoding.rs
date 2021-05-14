@@ -102,12 +102,15 @@ impl HighLevelEncoding for QuotientGraph {
     }
 }
 
-#[derive(Debug)]
+#[derive(custom_debug_derive::Debug)]
 struct SATEncodingDictionary {
     literal_in_counter: Literal,
     literal_out_counter: Literal,
+    #[debug(skip)]
     vertex_map: HashMap<VertexIndex, Literal>,
+    #[debug(skip)]
     orbit_map: HashMap<VertexIndex, Literal>,
+    #[debug(skip)]
     literal_map: HashMap<Literal, Literal>,
 }
 

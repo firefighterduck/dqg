@@ -1,6 +1,6 @@
 [package]
 name = "dqg"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Florian Sextl <sextl@in.tum.de>"]
 edition = "2018"
 
@@ -23,3 +23,4 @@ panic = "abort"
 [features]
 default = ["statistics"]
 statistics = []
+full-statistics = ["statistics"]
