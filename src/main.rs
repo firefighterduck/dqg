@@ -44,13 +44,17 @@ use statistics::{QuotientStatistics, Statistics};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Graph initialisation error")]
+    #[error("Graph initialization error")]
     GraphError(GraphError),
     #[error("Error while parsing input file with graph description")]
     ParseError,
+    #[error("Error while parsing graph from command line")]
+    CLIParseError(io::Error),
+    #[error("Error while calling Kissat")]
+    KissatError(kissat_rs::Error),
 }
 
-impl<'a> From<GraphError> for Error {
+impl From<GraphError> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(ge: GraphError) -> Self {
         Self::GraphError(ge)
@@ -61,6 +65,20 @@ impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(_: nom::Err<ParseError<'a>>) -> Self {
         Self::ParseError
+    }
+}
+
+impl From<kissat_rs::Error> for Error {
+    #[cfg(not(tarpaulin_include))]
+    fn from(ke: kissat_rs::Error) -> Self {
+        Self::KissatError(ke)
+    }
+}
+
+impl From<io::Error> for Error {
+    #[cfg(not(tarpaulin_include))]
+    fn from(ie: io::Error) -> Self {
+        Self::CLIParseError(ie)
     }
 }
 
@@ -81,23 +99,23 @@ fn compute_quotient(
     let formula = encode_problem(&params.0, &quotient_graph);
     #[cfg(feature = "statistics")]
     let formula_size = formula.len();
-    let _descriptive = solve(formula);
+    let descriptive = solve(formula);
 
     #[cfg(feature = "statistics")]
     if let Ok(mut statistics) = params.1.lock() {
         let quotient_stats = QuotientStatistics {
+            quotient_size,
             max_orbit_size,
             min_orbit_size,
-            quotient_size,
             formula_size,
-            descriptive: _descriptive,
+            descriptive,
         };
         statistics.log_quotient_statistic(quotient_stats);
     };
 }
 
 #[cfg(not(tarpaulin_include))]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Error> {
     let mut graph;
     let mut statistics_path;
 

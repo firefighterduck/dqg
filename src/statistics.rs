@@ -1,4 +1,4 @@
-use crate::graph::VertexIndex;
+use crate::{graph::VertexIndex, Error};
 use itertools::{Itertools, MinMaxResult};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -8,7 +8,7 @@ pub struct QuotientStatistics {
     pub max_orbit_size: usize,
     pub min_orbit_size: usize,
     pub formula_size: usize,
-    pub descriptive: bool,
+    pub descriptive: Result<bool, Error>,
 }
 
 impl QuotientStatistics {
@@ -91,7 +91,12 @@ impl Statistics {
             .max_quotient_graph_size
             .max(quotient_statistic.quotient_size);
         self.max_formula_size = self.max_formula_size.max(quotient_statistic.formula_size);
-        self.number_of_descriptive += if quotient_statistic.descriptive { 1 } else { 0 };
+        self.number_of_descriptive += if *quotient_statistic.descriptive.as_ref().unwrap_or(&false)
+        {
+            1
+        } else {
+            0
+        };
         #[cfg(feature = "full-statistics")]
         self.quotient_statistics.push(quotient_statistic);
     }

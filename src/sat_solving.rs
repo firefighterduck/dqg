@@ -1,8 +1,8 @@
 use kissat_rs::Solver;
 
-use crate::encoding::Formula;
+use crate::{encoding::Formula, Error};
 
 #[cfg(not(tarpaulin_include))]
-pub fn solve(formula: Formula) -> bool {
-    matches!(Solver::solve_formula(formula), Ok(Some(_)))
+pub fn solve(formula: Formula) -> Result<bool, Error> {
+    Solver::decide_formula(formula).map_err(Error::from)
 }

@@ -4,7 +4,10 @@
 
 use std::io::{self, Stdin, Write};
 
-use crate::graph::{Graph, VertexIndex};
+use crate::{
+    graph::{Graph, VertexIndex},
+    Error,
+};
 
 #[cfg(not(tarpaulin_include))]
 pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
@@ -32,11 +35,7 @@ pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn read_vertex(
-    index: VertexIndex,
-    graph: &mut Graph,
-    stdin: &Stdin,
-) -> Result<bool, io::Error> {
+pub fn read_vertex(index: VertexIndex, graph: &mut Graph, stdin: &Stdin) -> Result<bool, Error> {
     let mut line_buffer = String::new();
     let mut should_continue = true;
 
@@ -49,7 +48,7 @@ pub fn read_vertex(
         for input_part in line_buffer.split_whitespace() {
             if let Ok(end) = input_part.parse::<VertexIndex>() {
                 if end < graph.size() as i32 {
-                    graph.add_edge(index, end).unwrap();
+                    graph.add_edge(index, end)?;
                 } else {
                     println!(
                         "Please only input valid vertex indices (i.e. between 0 and {})!",
