@@ -140,11 +140,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "statistics")]
     statistics.log_number_of_generators(generators.len());
 
-    if generators.len() > 20 {
-        println!("Nope {}", generators.len());
-        return Ok(());
-    }
-
     #[cfg(feature = "statistics")]
     let statistics_arc = Arc::new(Mutex::new(statistics));
     let graph_arc = Arc::new(graph);

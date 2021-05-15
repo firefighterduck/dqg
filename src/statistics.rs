@@ -41,6 +41,7 @@ pub struct Statistics {
     max_orbit_size: usize,
     max_quotient_graph_size: usize,
     max_formula_size: usize,
+    number_of_descriptive: usize,
     #[cfg(feature = "full-statistics")]
     quotient_statistics: Vec<QuotientStatistics>,
 }
@@ -60,6 +61,7 @@ impl Statistics {
             max_orbit_size: 0,
             max_quotient_graph_size: 0,
             max_formula_size: 0,
+            number_of_descriptive: 0,
             #[cfg(feature = "full-statistics")]
             quotient_statistics: Vec::new(),
         }
@@ -89,6 +91,7 @@ impl Statistics {
             .max_quotient_graph_size
             .max(quotient_statistic.quotient_size);
         self.max_formula_size = self.max_formula_size.max(quotient_statistic.formula_size);
+        self.number_of_descriptive += if quotient_statistic.descriptive { 1 } else { 0 };
         #[cfg(feature = "full-statistics")]
         self.quotient_statistics.push(quotient_statistic);
     }

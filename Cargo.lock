@@ -276,7 +276,7 @@ dependencies = [
 [[package]]
 name = "kissat-rs"
 version = "0.1.0"
-source = "git+https://github.com/firefighterduck/kissat-rs?branch=main#7521b5743ec68c18ea5ee1dfdb334768359e8cf0"
+source = "git+https://github.com/firefighterduck/kissat-rs?branch=main#04842947839b99d6a93692d73bbf08b9055e7a3f"
 dependencies = [
  "derive-try-from-primitive",
  "kissat-sys",
@@ -286,7 +286,7 @@ dependencies = [
 [[package]]
 name = "kissat-sys"
 version = "0.1.0"
-source = "git+https://github.com/firefighterduck/kissat-rs?branch=main#7521b5743ec68c18ea5ee1dfdb334768359e8cf0"
+source = "git+https://github.com/firefighterduck/kissat-rs?branch=main#04842947839b99d6a93692d73bbf08b9055e7a3f"
 dependencies = [
  "bindgen",
 ]
