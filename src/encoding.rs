@@ -2,13 +2,14 @@
 //! needed to encode the descriptive quotient problem
 //! as a CNF formula which can then be decided by a SAT solver.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 
 use itertools::Itertools;
 use kissat_rs::Literal;
 
 use crate::{
     graph::{Graph, VertexIndex},
+    print_time, print_time_mut,
     quotient::{Orbits, QuotientGraph},
 };
 
@@ -48,8 +49,8 @@ impl HighLevelEncoding for Graph {
     fn encode_high(&self, in_quotient: bool) -> Self::HighLevelRepresentation {
         let mut edges = Vec::new();
 
-        self.iterate_edges(|edge| {
-            edges.push(edge);
+        self.iterate_edges(|(from, to)| {
+            edges.push((*from, *to));
         });
 
         edges
@@ -349,25 +350,51 @@ impl SATEncoding for QuotientGraphEncoding {
 pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula {
     let mut dict = SATEncodingDictionary::new();
 
-    let mut graph_edges_encoding: Formula = graph
-        .encode_high(false)
-        .into_iter()
-        .flat_map(|edge| edge.encode_sat(&mut dict))
-        .collect();
-    let (quotient_edges, orbits) = quotient_graph.encode_high(true);
-    let mut quotient_edges_encoding: Formula = quotient_edges
-        .iter()
-        .flat_map(|edge| edge.encode_sat(&mut dict))
-        .collect();
-    let mut transversal_encoding: Formula = orbits
-        .iter()
-        .flat_map(|orbit| orbit.encode_sat(&mut dict))
-        .collect();
-    let mut descriptive_constraint_encoding = (quotient_edges, orbits).encode_sat(&mut dict);
+    print_time_mut!(
+        "Graph encoding",
+        graph_edges_encoding,
+        graph
+            .encode_high(false)
+            .into_iter()
+            .flat_map(|edge| edge.encode_sat(&mut dict))
+            .collect::<Formula>()
+    );
+    print_time!(
+        "Quotient high encoding",
+        edges_and_orbits,
+        quotient_graph.encode_high(true)
+    );
+    let (quotient_edges, orbits) = edges_and_orbits;
 
+    print_time_mut!(
+        "Quotient encoding",
+        quotient_edges_encoding,
+        quotient_edges
+            .iter()
+            .flat_map(|edge| edge.encode_sat(&mut dict))
+            .collect::<Formula>()
+    );
+
+    print_time_mut!(
+        "Transversal encoding",
+        transversal_encoding,
+        orbits
+            .iter()
+            .flat_map(|orbit| orbit.encode_sat(&mut dict))
+            .collect::<Formula>()
+    );
+
+    print_time_mut!(
+        "Descriptive constraint encoding",
+        descriptive_constraint_encoding,
+        (quotient_edges, orbits).encode_sat(&mut dict)
+    );
+
+    let before_copy = Instant::now();
     graph_edges_encoding.append(&mut quotient_edges_encoding);
     graph_edges_encoding.append(&mut transversal_encoding);
     graph_edges_encoding.append(&mut descriptive_constraint_encoding);
+    println!("Formula combination takes {:?}", before_copy.elapsed());
 
     graph_edges_encoding
 }

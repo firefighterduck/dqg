@@ -148,11 +148,11 @@ impl Graph {
 
     pub fn iterate_edges<F>(&self, mut f: F)
     where
-        F: FnMut((VertexIndex, VertexIndex)),
+        F: FnMut((&VertexIndex, &VertexIndex)),
     {
         for vertex in self.vertices.iter() {
             for end in vertex.edges_to.iter() {
-                f((vertex.index, *end));
+                f((&vertex.index, end));
             }
         }
     }

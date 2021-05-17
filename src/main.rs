@@ -5,25 +5,14 @@
 //! descriptive quotients of graphs
 //! for certain conditions.
 
-use std::{
-    env::{self, current_dir},
-    fs::{read_to_string, File},
-    io::{self, Write},
-    path::PathBuf,
-    sync::Arc,
-};
-
-#[cfg(feature = "statistics")]
-use std::sync::Mutex;
+use itertools::Itertools;
+use std::{io, time::Instant};
 
 mod graph;
 use graph::{Graph, GraphError, VertexIndex};
 
 mod input;
-use input::{read_graph, read_vertex};
-
-mod combinatoric;
-use combinatoric::iterate_powerset;
+use input::read_graph;
 
 mod quotient;
 use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
@@ -35,11 +24,9 @@ mod sat_solving;
 use sat_solving::solve;
 
 mod parser;
-use parser::{parse_dreadnaut_input, ParseError};
+use parser::ParseError;
 
-#[cfg(feature = "statistics")]
 mod statistics;
-#[cfg(feature = "statistics")]
 use statistics::{QuotientStatistics, Statistics};
 
 #[derive(thiserror::Error, Debug)]
@@ -83,107 +70,119 @@ impl From<io::Error> for Error {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn compute_quotient(
-    generators_subset: &mut [Vec<VertexIndex>],
-    #[cfg(feature = "statistics")] params: (Arc<Graph>, Arc<Mutex<Statistics>>),
-    #[cfg(not(feature = "statistics"))] params: (Arc<Graph>, ()),
-) {
-    let orbits = generate_orbits(generators_subset);
-    #[cfg(feature = "statistics")]
-    let (min_orbit_size, max_orbit_size) = QuotientStatistics::log_orbit_sizes(&orbits);
+pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
+where
+    F: FnOnce(&mut T),
+{
+    if let Some(val) = optional {
+        f(val);
+    }
+}
 
-    let quotient_graph = QuotientGraph::from_graph_orbits(&params.0, orbits);
-    #[cfg(feature = "statistics")]
+#[cfg(not(tarpaulin_include))]
+fn compute_quotient_with_statistics(
+    generators_subset: &mut [Vec<VertexIndex>],
+    graph: &Graph,
+    statistics: &mut Statistics,
+) {
+    let start_time = Instant::now();
+
+    time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
+    time!(
+        log_orbit_time,
+        min_max_orbit_size,
+        QuotientStatistics::log_orbit_sizes(&orbits)
+    );
+    let (min_orbit_size, max_orbit_size) = min_max_orbit_size;
+
+    time!(
+        quotient_gen_time,
+        quotient_graph,
+        QuotientGraph::from_graph_orbits(&graph, orbits)
+    );
     let quotient_size = quotient_graph.quotient_graph.size();
 
-    let formula = encode_problem(&params.0, &quotient_graph);
-    #[cfg(feature = "statistics")]
+    time!(
+        encoding_time,
+        formula,
+        encode_problem(&graph, &quotient_graph)
+    );
     let formula_size = formula.len();
+
+    time!(kissat_time, descriptive, solve(formula));
+
+    let quotient_handling_time = start_time.elapsed();
+    let quotient_stats = QuotientStatistics {
+        quotient_size,
+        max_orbit_size,
+        min_orbit_size,
+        formula_size,
+        descriptive,
+        quotient_handling_time,
+        kissat_time,
+        orbit_gen_time,
+        quotient_gen_time,
+        encoding_time,
+        log_orbit_time,
+    };
+    statistics.log_quotient_statistic(quotient_stats);
+}
+
+#[cfg(not(tarpaulin_include))]
+fn compute_quotient(generators_subset: &mut [Vec<VertexIndex>], graph: &Graph) {
+    let orbits = generate_orbits(generators_subset);
+
+    let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+
+    let formula = encode_problem(&graph, &quotient_graph);
     let descriptive = solve(formula);
 
-    #[cfg(feature = "statistics")]
-    if let Ok(mut statistics) = params.1.lock() {
-        let quotient_stats = QuotientStatistics {
-            quotient_size,
-            max_orbit_size,
-            min_orbit_size,
-            formula_size,
-            descriptive,
-        };
-        statistics.log_quotient_statistic(quotient_stats);
-    };
+    if descriptive.is_ok() && descriptive.unwrap() {
+        eprintln!("Found a non descriptive quotient!");
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
-    let mut graph;
-    let mut statistics_path;
-
-    // Either read from a file ...
-    if env::args().len() > 1 {
-        let input_path = env::args().nth(1).expect("usage: dqg FILE");
-        let file = read_to_string(&input_path)?;
-
-        statistics_path = PathBuf::from(&input_path);
-        statistics_path.set_extension("dqg");
-
-        graph = parse_dreadnaut_input(&file)?;
-    } else {
-        let stdin = io::stdin();
-
-        statistics_path =
-            current_dir().expect("Statistics feature requires current directory to be accessible!");
-        statistics_path.push("statistics.dqg");
-
-        // or initialize the graph for a number of vertices from stdin ...
-        graph = read_graph(&stdin)?;
-
-        // ..., then read and insert the edges and ...
-        for i in 0..graph.size() {
-            if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
-                break;
-            }
-        }
-    }
-
-    #[cfg(feature = "statistics")]
-    let mut statistics = Statistics::new(graph.size());
+    // Read the graph form a file or via CLI and ...
+    let (mut graph, mut statistics, iter_powerset) = read_graph()?;
 
     // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
     assert!(nauty_graph.check_valid());
-    let generators = compute_generators_with_nauty(nauty_graph);
-    #[cfg(feature = "statistics")]
-    statistics.log_nauty_done();
-    #[cfg(feature = "statistics")]
-    statistics.log_number_of_generators(generators.len());
+    let mut generators = compute_generators_with_nauty(nauty_graph);
 
-    #[cfg(feature = "statistics")]
-    let statistics_arc = Arc::new(Mutex::new(statistics));
-    let graph_arc = Arc::new(graph);
-    let parameter_generator = || {
-        (
-            Arc::clone(&graph_arc),
-            #[cfg(feature = "statistics")]
-            Arc::clone(&statistics_arc),
-            #[cfg(not(feature = "statistics"))]
-            (),
-        )
-    };
+    do_if_some(&mut statistics, Statistics::log_nauty_done);
+    do_if_some(&mut statistics, |st| {
+        st.log_number_of_generators(generators.len())
+    });
 
-    // ... iterate over all possible subsets of generators.
-    iterate_powerset(generators, compute_quotient, parameter_generator);
-    let mut statistics_file = File::create(statistics_path)?;
+    // ... iterate over the specified subsets of generators...
+    if let Some(mut statistics) = statistics {
+        // ... with statistics ...
+        if iter_powerset {
+            generators.into_iter().powerset().for_each(|mut subset| {
+                compute_quotient_with_statistics(&mut subset, &graph, &mut statistics)
+            });
+        } else {
+            compute_quotient_with_statistics(&mut generators, &graph, &mut statistics);
+        }
 
-    #[cfg(feature = "statistics")]
-    {
-        let mut statistics = statistics_arc.lock().unwrap();
         statistics.log_end();
-
-        write!(statistics_file, "{:#?}", statistics)?;
+        statistics.save_statistics()?;
+    } else {
+        // ... or without.
+        {
+            if iter_powerset {
+                generators
+                    .into_iter()
+                    .powerset()
+                    .for_each(|mut subset| compute_quotient(&mut subset, &graph));
+            } else {
+                compute_quotient(&mut generators, &graph);
+            }
+        }
     }
-    #[cfg(not(feature = "statistics"))]
-    write!(statistics_file, "Statistics disabled!")?;
 
     Ok(())
 }

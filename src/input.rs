@@ -2,15 +2,40 @@
 //! graphs from stdin. Uses similar commands
 //! as dreadnaut.
 
-use std::io::{self, Stdin, Write};
+use std::{
+    env::current_dir,
+    fs::read_to_string,
+    io::{self, Stdin, Write},
+    path::PathBuf,
+};
+use structopt::StructOpt;
 
 use crate::{
     graph::{Graph, VertexIndex},
+    parser::parse_dreadnaut_input,
+    statistics::{Statistics, StatisticsLevel},
     Error,
 };
 
+#[derive(StructOpt, Debug)]
+#[structopt(name = "DQG")]
+struct CommandLineOptions {
+    /// Test whole powerset of the generators.
+    #[structopt(short = "-p", long)]
+    iter_powerset: bool,
+    /// Level of detail for statistics.
+    /// None if left out, basic if `-s`, full for more than one `-s`.
+    #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
+    statistics_level: StatisticsLevel,
+    /// The input file to read from. Optional.
+    /// Same path will be used for output.
+    /// Reads through CLI if not specified.
+    #[structopt(parse(from_os_str))]
+    input: Option<PathBuf>,
+}
+
 #[cfg(not(tarpaulin_include))]
-pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
+fn read_graph_empty(stdin: &Stdin) -> Result<Graph, io::Error> {
     let mut buffer = String::new();
     let number_of_vertices;
 
@@ -35,7 +60,7 @@ pub fn read_graph(stdin: &Stdin) -> Result<Graph, io::Error> {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn read_vertex(index: VertexIndex, graph: &mut Graph, stdin: &Stdin) -> Result<bool, Error> {
+fn read_vertex(index: VertexIndex, graph: &mut Graph, stdin: &Stdin) -> Result<bool, Error> {
     let mut line_buffer = String::new();
     let mut should_continue = true;
 
@@ -72,4 +97,48 @@ with the next vertex or a `.` to end inputting edges.", index, index);
     }
 
     Ok(should_continue)
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn read_graph() -> Result<(Graph, Option<Statistics>, bool), Error> {
+    let cl_options = CommandLineOptions::from_args();
+    let mut graph;
+    let mut out_file;
+    let statistics;
+
+    if let Some(path_to_graph_file) = cl_options.input {
+        // Either read the graph from a file ..
+        let file = read_to_string(&path_to_graph_file)?;
+        graph = parse_dreadnaut_input(&file)?;
+
+        out_file = path_to_graph_file;
+        out_file.set_extension("dqg");
+    } else {
+        // ... or incrementally from stdin.
+        let stdin = io::stdin();
+        graph = read_graph_empty(&stdin)?;
+
+        for i in 0..graph.size() {
+            if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
+                break;
+            }
+        }
+
+        out_file =
+            current_dir().expect("Statistics feature requires current directory to be accessible!");
+        out_file.push("statistics.dqg");
+    }
+
+    // Start the statistics after the graph reading is done.
+    if cl_options.statistics_level == StatisticsLevel::None {
+        statistics = None;
+    } else {
+        statistics = Some(Statistics::new(
+            cl_options.statistics_level,
+            out_file,
+            graph.size(),
+        ));
+    }
+
+    Ok((graph, statistics, cl_options.iter_powerset))
 }

@@ -125,7 +125,11 @@ impl QuotientGraph {
     /// Generates the quotient graph where each orbit is represented
     /// by the vertex with the smallest index in the orbit.
     pub fn from_graph_orbits(graph: &Graph, orbits: Orbits) -> Self {
-        let unique_orbits: Vec<VertexIndex> = orbits.iter().unique().copied().collect();
+        let unique_orbits = orbits
+            .iter()
+            .unique()
+            .copied()
+            .collect::<Vec<VertexIndex>>();
         let mut quotient_graph;
 
         // We don't need to search for edges if there can't be any.
@@ -134,8 +138,8 @@ impl QuotientGraph {
             // Add edges between the orbits if single vertices in these are
             // connected by and edge. Doesn't add edges within the same orbit.
             graph.iterate_edges(|(start, end)| {
-                let start_orbit = get_orbit(&orbits, start);
-                let end_orbit = get_orbit(&orbits, end);
+                let start_orbit = get_orbit(&orbits, *start);
+                let end_orbit = get_orbit(&orbits, *end);
                 if start_orbit != end_orbit {
                     quotient_graph
                         .add_arc(start_orbit, end_orbit)
