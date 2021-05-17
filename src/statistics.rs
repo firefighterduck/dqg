@@ -53,6 +53,7 @@ pub enum StatisticsLevel {
 }
 
 impl From<u64> for StatisticsLevel {
+    #[cfg(not(tarpaulin_include))]
     fn from(level: u64) -> Self {
         match level {
             0 => Self::None,

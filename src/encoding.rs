@@ -2,14 +2,13 @@
 //! needed to encode the descriptive quotient problem
 //! as a CNF formula which can then be decided by a SAT solver.
 
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 use kissat_rs::Literal;
 
 use crate::{
     graph::{Graph, VertexIndex},
-    print_time, print_time_mut,
     quotient::{Orbits, QuotientGraph},
 };
 
@@ -29,7 +28,7 @@ trait SATEncoding {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum EdgeEncoding {
+pub enum EdgeEncoding {
     OrbitEdge((VertexIndex, VertexIndex)),
     VertexEdge((VertexIndex, VertexIndex)),
 }
@@ -104,7 +103,7 @@ impl HighLevelEncoding for QuotientGraph {
 }
 
 #[derive(custom_debug_derive::Debug)]
-struct SATEncodingDictionary {
+pub struct SATEncodingDictionary {
     literal_in_counter: Literal,
     literal_out_counter: Literal,
     #[debug(skip)]
@@ -345,56 +344,42 @@ impl SATEncoding for QuotientGraphEncoding {
     }
 }
 
+/// Encodes the edges of a graph.
+/// This part does not change for
+/// different quotients, so it can be
+/// computed once and then shared.
+pub fn encode_graph_edges(graph: &Graph, dict: &mut SATEncodingDictionary) -> Formula {
+    graph
+        .encode_high(false)
+        .iter()
+        .flat_map(|edge| edge.encode_sat(dict))
+        .collect()
+}
+
 /// Encode the decision problem whether a set of generators
 /// induces a descriptive quotient graph into SAT.
-pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula {
-    let mut dict = SATEncodingDictionary::new();
+pub fn encode_problem(
+    quotient_graph: &QuotientGraph,
+    mut graph_edges_encoding: Formula,
+    dict: &mut SATEncodingDictionary,
+) -> Formula {
+    let (quotient_edges, orbits) = quotient_graph.encode_high(true);
 
-    print_time_mut!(
-        "Graph encoding",
-        graph_edges_encoding,
-        graph
-            .encode_high(false)
-            .into_iter()
-            .flat_map(|edge| edge.encode_sat(&mut dict))
-            .collect::<Formula>()
-    );
-    print_time!(
-        "Quotient high encoding",
-        edges_and_orbits,
-        quotient_graph.encode_high(true)
-    );
-    let (quotient_edges, orbits) = edges_and_orbits;
+    let mut quotient_edges_encoding = quotient_edges
+        .iter()
+        .flat_map(|edge| edge.encode_sat(dict))
+        .collect::<Formula>();
 
-    print_time_mut!(
-        "Quotient encoding",
-        quotient_edges_encoding,
-        quotient_edges
-            .iter()
-            .flat_map(|edge| edge.encode_sat(&mut dict))
-            .collect::<Formula>()
-    );
+    let mut transversal_encoding = orbits
+        .iter()
+        .flat_map(|orbit| orbit.encode_sat(dict))
+        .collect::<Formula>();
 
-    print_time_mut!(
-        "Transversal encoding",
-        transversal_encoding,
-        orbits
-            .iter()
-            .flat_map(|orbit| orbit.encode_sat(&mut dict))
-            .collect::<Formula>()
-    );
+    let mut descriptive_constraint_encoding = (quotient_edges, orbits).encode_sat(dict);
 
-    print_time_mut!(
-        "Descriptive constraint encoding",
-        descriptive_constraint_encoding,
-        (quotient_edges, orbits).encode_sat(&mut dict)
-    );
-
-    let before_copy = Instant::now();
     graph_edges_encoding.append(&mut quotient_edges_encoding);
     graph_edges_encoding.append(&mut transversal_encoding);
     graph_edges_encoding.append(&mut descriptive_constraint_encoding);
-    println!("Formula combination takes {:?}", before_copy.elapsed());
 
     graph_edges_encoding
 }
@@ -403,7 +388,7 @@ pub fn encode_problem(graph: &Graph, quotient_graph: &QuotientGraph) -> Formula 
 mod test {
     use std::collections::HashSet;
 
-    use crate::graph::GraphError;
+    use crate::{graph::GraphError, Error};
 
     use super::*;
 
@@ -450,8 +435,34 @@ mod test {
             ],
         ];
 
-        let formula = encode_problem(&graph, &quotient_graph);
+        let mut dict = SATEncodingDictionary::new();
+        let graph_edges_encoding = encode_graph_edges(&graph, &mut dict);
+        let formula = encode_problem(&quotient_graph, graph_edges_encoding, &mut dict);
         assert_eq!(expected_formula, formula);
+        Ok(())
+    }
+
+    #[test]
+    fn test_encode_graph_edges() -> Result<(), Error> {
+        let mut graph = Graph::new_ordered(5);
+        graph.add_arc(0, 1)?;
+        graph.add_arc(1, 2)?;
+        graph.add_arc(3, 4)?;
+        graph.add_arc(4, 0)?;
+
+        let expected = vec![
+            // Graph edges
+            vec![1], // v0,v1
+            vec![2], // v1,v2
+            vec![3], // v3,v4
+            vec![4], // v4,v0
+        ];
+
+        let mut dict = SATEncodingDictionary::new();
+        let actual = encode_graph_edges(&graph, &mut dict);
+
+        assert_eq!(expected, actual);
+
         Ok(())
     }
 
