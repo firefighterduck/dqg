@@ -68,7 +68,6 @@ pub struct QuotientStatistics {
     pub quotient_size: usize,
     pub max_orbit_size: usize,
     pub min_orbit_size: usize,
-    pub formula_size: usize,
     pub descriptive: Result<bool, Error>,
     pub quotient_handling_time: Duration,
     pub kissat_time: Duration,
@@ -110,7 +109,6 @@ pub struct Statistics {
     number_of_generators: Option<usize>,
     max_orbit_size: usize,
     max_quotient_graph_size: usize,
-    max_formula_size: usize,
     number_of_descriptive: usize,
     max_quotient_handling_time: Option<Duration>,
     max_kissat_time: Option<Duration>,
@@ -132,7 +130,6 @@ impl Statistics {
             number_of_generators: None,
             max_orbit_size: 0,
             max_quotient_graph_size: 0,
-            max_formula_size: 0,
             number_of_descriptive: 0,
             max_quotient_handling_time: None,
             max_kissat_time: None,
@@ -161,7 +158,6 @@ impl Statistics {
         self.max_quotient_graph_size = self
             .max_quotient_graph_size
             .max(quotient_statistic.quotient_size);
-        self.max_formula_size = self.max_formula_size.max(quotient_statistic.formula_size);
         self.number_of_descriptive += if *quotient_statistic.descriptive.as_ref().unwrap_or(&false)
         {
             1

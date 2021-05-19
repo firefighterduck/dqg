@@ -360,28 +360,28 @@ pub fn encode_graph_edges(graph: &Graph, dict: &mut SATEncodingDictionary) -> Fo
 /// induces a descriptive quotient graph into SAT.
 pub fn encode_problem(
     quotient_graph: &QuotientGraph,
-    mut graph_edges_encoding: Formula,
+    graph_edges_encoding: Formula,
     dict: &mut SATEncodingDictionary,
-) -> Formula {
+) -> impl Iterator<Item = Clause> {
     let (quotient_edges, orbits) = quotient_graph.encode_high(true);
 
-    let mut quotient_edges_encoding = quotient_edges
+    let quotient_edges_encoding = quotient_edges
         .iter()
         .flat_map(|edge| edge.encode_sat(dict))
         .collect::<Formula>();
 
-    let mut transversal_encoding = orbits
+    let transversal_encoding = orbits
         .iter()
         .flat_map(|orbit| orbit.encode_sat(dict))
         .collect::<Formula>();
 
-    let mut descriptive_constraint_encoding = (quotient_edges, orbits).encode_sat(dict);
-
-    graph_edges_encoding.append(&mut quotient_edges_encoding);
-    graph_edges_encoding.append(&mut transversal_encoding);
-    graph_edges_encoding.append(&mut descriptive_constraint_encoding);
+    let descriptive_constraint_encoding = (quotient_edges, orbits).encode_sat(dict);
 
     graph_edges_encoding
+        .into_iter()
+        .chain(quotient_edges_encoding.into_iter())
+        .chain(transversal_encoding.into_iter())
+        .chain(descriptive_constraint_encoding.into_iter())
 }
 
 #[cfg(test)]
@@ -401,7 +401,7 @@ mod test {
         let orbits = vec![0, 1, 0];
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
 
-        let expected_formula = vec![
+        let expected_formula: Formula = vec![
             // Graph edges
             vec![1], // v0,v1
             vec![2], // v2,v1
@@ -438,7 +438,9 @@ mod test {
         let mut dict = SATEncodingDictionary::new();
         let graph_edges_encoding = encode_graph_edges(&graph, &mut dict);
         let formula = encode_problem(&quotient_graph, graph_edges_encoding, &mut dict);
-        assert_eq!(expected_formula, formula);
+        assert!(formula
+            .zip_eq(expected_formula.iter())
+            .all(|(fst, snd)| fst.eq(snd)));
         Ok(())
     }
 

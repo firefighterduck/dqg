@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "dqg"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "custom_debug_derive",
  "itertools",

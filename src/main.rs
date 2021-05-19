@@ -109,7 +109,6 @@ fn compute_quotient_with_statistics(
         formula,
         encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict)
     );
-    let formula_size = formula.len();
 
     time!(kissat_time, descriptive, solve(formula));
 
@@ -118,7 +117,6 @@ fn compute_quotient_with_statistics(
         quotient_size,
         max_orbit_size,
         min_orbit_size,
-        formula_size,
         descriptive,
         quotient_handling_time,
         kissat_time,
