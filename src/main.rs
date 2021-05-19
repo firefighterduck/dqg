@@ -142,7 +142,7 @@ fn compute_quotient(
     let formula = encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict);
     let descriptive = solve(formula);
 
-    if descriptive.is_ok() && descriptive.unwrap() {
+    if descriptive.is_ok() && !descriptive.unwrap() {
         eprintln!("Found a non descriptive quotient!");
     }
 }

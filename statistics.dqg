@@ -1,0 +1,37 @@
+Raw Statistics: Statistics {
+    nauty_done_time: Some(
+        16.359073609s,
+    ),
+    end_time: Some(
+        16.680438464s,
+    ),
+    graph_size: 13168,
+    number_of_generators: Some(
+        52,
+    ),
+    max_orbit_size: 16,
+    max_quotient_graph_size: 3738,
+    number_of_descriptive: 1,
+    max_quotient_handling_time: Some(
+        305.445802ms,
+    ),
+    max_kissat_time: Some(
+        60.164408ms,
+    ),
+    quotient_statistics: [
+        QuotientStatistics {
+            quotient_size: 3738,
+            max_orbit_size: 16,
+            min_orbit_size: 1,
+            descriptive: Ok(
+                true,
+            ),
+            quotient_handling_time: 305.445802ms,
+            kissat_time: 60.164408ms,
+            orbit_gen_time: 766.488µs,
+            quotient_gen_time: 133.998556ms,
+            encoding_time: 110.491649ms,
+            log_orbit_time: 24.371µs,
+        },
+    ],
+}

@@ -5,7 +5,7 @@
 use std::{
     env::current_dir,
     fs::read_to_string,
-    io::{self, Stdin, Write},
+    io::{self, BufRead, Stdin, Write},
     path::PathBuf,
 };
 use structopt::StructOpt;
@@ -23,6 +23,9 @@ struct CommandLineOptions {
     /// Test whole powerset of the generators.
     #[structopt(short = "-p", long)]
     iter_powerset: bool,
+    /// Read a file from command line.
+    #[structopt(short = "-m", long)]
+    read_memory_pipe: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -114,13 +117,31 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, bool), Error> {
         out_file = path_to_graph_file;
         out_file.set_extension("dqg");
     } else {
-        // ... or incrementally from stdin.
+        // ... or from stdin.
         let stdin = io::stdin();
-        graph = read_graph_empty(&stdin)?;
 
-        for i in 0..graph.size() {
-            if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
-                break;
+        if cl_options.read_memory_pipe {
+            // Stdin can either mean a memory pipe ...
+            let file = stdin
+                .lock()
+                .lines()
+                .map(|mut line| {
+                    line.iter_mut().for_each(|line| line.push('\n'));
+                    line
+                })
+                .fold(String::new(), |mut acc, line| {
+                    line.iter().for_each(|line| acc.push_str(line));
+                    acc
+                });
+            graph = parse_dreadnaut_input(&file)?;
+        } else {
+            // .... or the interactive command line interface.
+            graph = read_graph_empty(&stdin)?;
+
+            for i in 0..graph.size() {
+                if !read_vertex(i as VertexIndex, &mut graph, &stdin)? {
+                    break;
+                }
             }
         }
 

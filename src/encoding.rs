@@ -358,6 +358,7 @@ pub fn encode_graph_edges(graph: &Graph, dict: &mut SATEncodingDictionary) -> Fo
 
 /// Encode the decision problem whether a set of generators
 /// induces a descriptive quotient graph into SAT.
+#[allow(clippy::needless_collect)]
 pub fn encode_problem(
     quotient_graph: &QuotientGraph,
     graph_edges_encoding: Formula,
