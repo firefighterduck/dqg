@@ -14,7 +14,7 @@ use crate::{
     graph::{Graph, VertexIndex},
     parser::parse_dreadnaut_input,
     statistics::{Statistics, StatisticsLevel},
-    Error,
+    Error, Settings,
 };
 
 #[derive(StructOpt, Debug)]
@@ -26,6 +26,10 @@ struct CommandLineOptions {
     /// Read a file from command line.
     #[structopt(short = "-m", long)]
     read_memory_pipe: bool,
+    /// Stops after computing the orbits and
+    /// outputs these in a nauty-like fashion.
+    #[structopt(short = "-o", long)]
+    orbits_only: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -103,7 +107,7 @@ with the next vertex or a `.` to end inputting edges.", index, index);
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn read_graph() -> Result<(Graph, Option<Statistics>, bool), Error> {
+pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
     let cl_options = CommandLineOptions::from_args();
     let mut graph;
     let mut out_file;
@@ -161,5 +165,10 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, bool), Error> {
         ));
     }
 
-    Ok((graph, statistics, cl_options.iter_powerset))
+    let settings = Settings {
+        iter_powerset: cl_options.iter_powerset,
+        orbits_only: cl_options.orbits_only,
+    };
+
+    Ok((graph, statistics, settings))
 }

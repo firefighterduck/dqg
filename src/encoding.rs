@@ -18,7 +18,7 @@ const MAX_LITERAL: Literal = 2i32.pow(28) - 1;
 
 /// Trait that defines whether a type can be encoded
 /// into a high level view of a SAT formula.
-trait HighLevelEncoding {
+pub trait HighLevelEncoding {
     type HighLevelRepresentation;
     fn encode_high(&self, in_quotient: bool) -> Self::HighLevelRepresentation;
 }

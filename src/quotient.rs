@@ -5,9 +5,12 @@ use custom_debug_derive::Debug;
 use itertools::Itertools;
 use libffi::high::ClosureMut6;
 use nauty_Traces_sys::{densenauty, orbjoin, statsblk};
-use std::{os::raw::c_int, slice::from_raw_parts};
+use std::{io::Write, os::raw::c_int, slice::from_raw_parts};
 
-use crate::graph::{Graph, NautyGraph, Vertex, VertexIndex};
+use crate::{
+    encoding::HighLevelEncoding,
+    graph::{Graph, NautyGraph, Vertex, VertexIndex},
+};
 
 pub type Generator = Vec<VertexIndex>;
 pub type Orbits = Vec<VertexIndex>;
@@ -109,6 +112,31 @@ pub fn generate_orbits(generators: &mut [Generator]) -> Orbits {
     }
 
     orbits
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn print_orbits_nauty_style(orbits: Orbits) {
+    // This is necessary to give a correct
+    // start point for the output.
+    println!("cpu time = 0.00 seconds");
+
+    orbits
+        .encode_high(false)
+        .into_iter()
+        .for_each(|(orbit, members)| {
+            if members.len() > 1 {
+                members.iter().for_each(|member| print!("{} ", member));
+                print!("({}); ", members.len());
+            } else {
+                print!("{}; ", orbit);
+            }
+        });
+
+    // Force new line and flush everything out.
+    println!();
+    std::io::stdout()
+        .flush()
+        .expect("Why would stdout not be flushed?");
 }
 
 /// Represents a quotient graph where the vertices are

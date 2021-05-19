@@ -29,6 +29,8 @@ use parser::ParseError;
 mod statistics;
 use statistics::{QuotientStatistics, Statistics};
 
+use crate::quotient::print_orbits_nauty_style;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Graph initialization error")]
@@ -77,6 +79,13 @@ where
     if let Some(val) = optional {
         f(val);
     }
+}
+
+pub struct Settings {
+    /// Iterate the whole powerset.
+    pub iter_powerset: bool,
+    /// Compute only orbits.
+    pub orbits_only: bool,
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -150,7 +159,7 @@ fn compute_quotient(
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
     // Read the graph form a file or via CLI and ...
-    let (mut graph, mut statistics, iter_powerset) = read_graph()?;
+    let (mut graph, mut statistics, settings) = read_graph()?;
 
     // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
@@ -162,6 +171,13 @@ fn main() -> Result<(), Error> {
         st.log_number_of_generators(generators.len())
     });
 
+    if settings.orbits_only {
+        // TODO apply heuristic beforehand
+        let orbits = generate_orbits(&mut generators);
+        print_orbits_nauty_style(orbits);
+        return Ok(());
+    }
+
     // ... generate the shared encoding of the input graph and ...
     let mut sat_encoding_dict = SATEncodingDictionary::new();
     let graph_edges_encoding = encode_graph_edges(&graph, &mut sat_encoding_dict);
@@ -169,7 +185,7 @@ fn main() -> Result<(), Error> {
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {
         // ... with statistics ...
-        if iter_powerset {
+        if settings.iter_powerset {
             generators
                 .into_iter()
                 .powerset()
@@ -198,7 +214,7 @@ fn main() -> Result<(), Error> {
     } else {
         // ... or without.
         {
-            if iter_powerset {
+            if settings.iter_powerset {
                 generators
                     .into_iter()
                     .powerset()
