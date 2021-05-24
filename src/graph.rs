@@ -11,6 +11,8 @@ use crate::debug::bin_fmt;
 pub type Colour = c_int;
 pub type VertexIndex = c_int;
 
+pub const DEFAULT_COLOR: Colour = c_int::MAX;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct GraphError(VertexIndex);
 
@@ -58,7 +60,7 @@ impl Graph {
     pub fn new_ordered(n: usize) -> Self {
         let mut vertices = Vec::with_capacity(n);
         for index in 0..n {
-            vertices.push(Vertex::new(index as VertexIndex, -1));
+            vertices.push(Vertex::new(index as VertexIndex, DEFAULT_COLOR));
         }
         Graph {
             vertices,
@@ -70,7 +72,7 @@ impl Graph {
     pub fn new_with_indices(indices: &[VertexIndex]) -> Self {
         let mut vertices = Vec::with_capacity(indices.len());
         for index in indices {
-            vertices.push(Vertex::new(*index, -1));
+            vertices.push(Vertex::new(*index, DEFAULT_COLOR));
         }
         Graph {
             vertices,
@@ -230,7 +232,7 @@ impl Graph {
             }
         }
 
-        let mut last_colour = -2; // -1 is standard for not set and other negative numbers can not arise.
+        let mut last_colour = c_int::MIN; // Negative numbers should not arise or if they do, they should be bigger than this.
         for colour in nauty_graph.partition.iter_mut().rev() {
             if *colour != last_colour {
                 last_colour = *colour;
@@ -283,7 +285,7 @@ mod test {
         let graph = Graph::new_ordered(120);
         for (index, vertex) in graph.vertices.iter().enumerate() {
             assert_eq!(index as VertexIndex, vertex.index);
-            assert_eq!(-1, vertex.colour);
+            assert_eq!(DEFAULT_COLOR, vertex.colour);
             assert!(vertex.edges_to.is_empty());
         }
     }
@@ -326,11 +328,11 @@ mod test {
         let oob_vertex_chaos = Vertex::new(5, 124);
         assert_eq!(Err(GraphError(5)), graph.set_vertex(oob_vertex_chaos));
 
-        assert_eq!(graph.vertices[0], Vertex::new(0, -1));
-        assert_eq!(graph.vertices[1], Vertex::new(1, -1));
+        assert_eq!(graph.vertices[0], Vertex::new(0, DEFAULT_COLOR));
+        assert_eq!(graph.vertices[1], Vertex::new(1, DEFAULT_COLOR));
         assert_eq!(graph.vertices[2], valid_vertex);
         assert_eq!(graph.vertices[3], valid_vertex_chaos);
-        assert_eq!(graph.vertices[4], Vertex::new(4, -1));
+        assert_eq!(graph.vertices[4], Vertex::new(4, DEFAULT_COLOR));
     }
 
     #[test]
@@ -344,7 +346,7 @@ mod test {
         // In bounds
         let valid_result = graph.get_vertex_mut(2);
         assert!(valid_result.is_ok());
-        assert_eq!(&mut Vertex::new(2, -1), valid_result.unwrap());
+        assert_eq!(&mut Vertex::new(2, DEFAULT_COLOR), valid_result.unwrap());
 
         // Negative index
         assert_eq!(Err(GraphError(-3)), graph.get_vertex_mut(-3));
@@ -358,7 +360,7 @@ mod test {
         // In bounds
         let valid_result = graph.get_vertex_mut(3);
         assert!(valid_result.is_ok());
-        assert_eq!(&mut Vertex::new(3, -1), valid_result.unwrap());
+        assert_eq!(&mut Vertex::new(3, DEFAULT_COLOR), valid_result.unwrap());
 
         // Negative index
         assert_eq!(Err(GraphError(-1)), graph.get_vertex_mut(-1));
@@ -389,7 +391,6 @@ mod test {
         graph.order(&order)?;
 
         let mut nauty_graph = graph.prepare_nauty();
-        println!("{:?}", graph.state);
         assert_eq!(nauty_graph.vertex_order, order);
         assert_eq!(nauty_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
         assert!(nauty_graph.check_valid());
@@ -436,7 +437,6 @@ mod test {
         graph.add_edge(6, 7)?;
 
         let mut nauty_graph = graph.prepare_nauty();
-        println!("{:?}", graph.state);
         assert_eq!(nauty_graph.vertex_order, [0, 1, 2, 3, 4, 5, 6, 7]);
         assert_eq!(nauty_graph.partition, [1, 1, 1, 1, 1, 1, 1, 0]);
         assert!(nauty_graph.check_valid());
@@ -444,7 +444,6 @@ mod test {
 
         let mut options = optionblk::default();
         options.writeautoms = FALSE;
-        options.defaultptn = FALSE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; 8];
 

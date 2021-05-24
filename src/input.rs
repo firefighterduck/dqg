@@ -33,6 +33,13 @@ struct CommandLineOptions {
     /// Logs all orbit sizes in a HashMap.
     #[structopt(short = "-l", long)]
     log_orbits: bool,
+    /// Print formula instead of solving it.
+    #[structopt(short = "-f", long)]
+    print_formula: bool,
+    /// Graph is colored and colors should be
+    /// included in the nauty computation.
+    #[structopt(short = "-c", long)]
+    colored_graph: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -172,6 +179,8 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         iter_powerset: cl_options.iter_powerset,
         orbits_only: cl_options.orbits_only,
         log_orbits: cl_options.log_orbits,
+        print_formula: cl_options.print_formula,
+        colored_graph: cl_options.colored_graph,
     };
 
     Ok((graph, statistics, settings))

@@ -3,7 +3,7 @@
 //! problems by this tool: https://home.in.tum.de/~mansour/cv-and-website/tools/quotientPlan.zip
 
 use crate::{
-    graph::{Colour, Graph, VertexIndex},
+    graph::{Colour, Graph, VertexIndex, DEFAULT_COLOR},
     Error,
 };
 
@@ -105,7 +105,7 @@ fn parse_continue_after_edge_line(input: Input<'_>) -> ParseResult<'_, bool> {
 
 /// Parse the colouring (i.e. the partition of the vertices). The input looks like this:
 /// `f=[c11,c12.c13,...c1n|c21,c22,...c2m|...|cp1,cp2,...,cpk]`
-/// Not specified vertices stay in colour -1.
+/// Not specified vertices stay in colour DEFAULT_COLOR.
 /// Also checks, that there is nothing of relevance after the colouring.
 fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<Colour>> {
     use nom::{
@@ -116,7 +116,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
         sequence::tuple,
     };
 
-    let mut colours = vec![-1; graph_size];
+    let mut colours = vec![DEFAULT_COLOR; graph_size];
     let mut colour_counter = 1;
 
     let sep = |sep_tag| tuple((space0, tag(sep_tag), space0));
@@ -227,7 +227,7 @@ mod test {
     fn test_parse_colouring() {
         let test_input = "f=[1|  0  ,  3 | 2] x o\n\n";
         let (_, parsed_colours) = parse_colouring(5, test_input).unwrap();
-        assert_eq!(vec![2, 1, 3, 2, -1], parsed_colours);
+        assert_eq!(vec![2, 1, 3, 2, DEFAULT_COLOR], parsed_colours);
     }
 
     #[test]
@@ -248,7 +248,9 @@ f=[0|1, 2] x o
         expected_graph.add_edge(0, 2).unwrap();
         expected_graph.add_edge(2, 3).unwrap();
         expected_graph.add_edge(3, 0).unwrap();
-        expected_graph.set_colours(&vec![1, 2, 2, -1]).unwrap();
+        expected_graph
+            .set_colours(&vec![1, 2, 2, DEFAULT_COLOR])
+            .unwrap();
 
         let parsed_graph = parse_dreadnaut_input(test_file).unwrap();
         assert_eq!(expected_graph, parsed_graph);

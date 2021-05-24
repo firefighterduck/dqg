@@ -15,9 +15,7 @@ mod input;
 use input::read_graph;
 
 mod quotient;
-use quotient::{
-    compute_generators_with_nauty, generate_orbits, print_orbits_nauty_style, QuotientGraph,
-};
+use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
 
 mod encoding;
 use encoding::{
@@ -34,6 +32,7 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
+use debug::{print_formula, print_orbits_nauty_style};
 
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
@@ -52,6 +51,11 @@ pub struct Settings {
     pub orbits_only: bool,
     /// Log orbit sizes.
     pub log_orbits: bool,
+    /// Print formula instead of solving it.
+    pub print_formula: bool,
+    /// Graph is colored and colors should be
+    /// included in the nauty computation.
+    pub colored_graph: bool,
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -93,6 +97,11 @@ fn compute_quotient_with_statistics(
         encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict)
     );
 
+    if settings.print_formula {
+        print_formula(formula);
+        return;
+    }
+
     time!(kissat_time, descriptive, solve(formula));
 
     let quotient_handling_time = start_time.elapsed();
@@ -117,12 +126,19 @@ fn compute_quotient(
     graph: &Graph,
     graph_edges_encoding: Formula,
     sat_encoding_dict: &mut SATEncodingDictionary,
+    settings: &Settings,
 ) {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
 
     let formula = encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict);
+
+    if settings.print_formula {
+        print_formula(formula);
+        return;
+    }
+
     let descriptive = solve(formula);
 
     if descriptive.is_ok() && !descriptive.unwrap() {
@@ -132,13 +148,14 @@ fn compute_quotient(
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
-    // Read the graph form a file or via CLI and ...
+    // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
 
     // ... compute the generators with nauty. Then ...
     let nauty_graph = graph.prepare_nauty();
+
     assert!(nauty_graph.check_valid());
-    let mut generators = compute_generators_with_nauty(nauty_graph);
+    let mut generators = compute_generators_with_nauty(nauty_graph, &settings);
 
     do_if_some(&mut statistics, Statistics::log_nauty_done);
     do_if_some(&mut statistics, |st| {
@@ -201,6 +218,7 @@ fn main() -> Result<(), Error> {
                             &graph,
                             graph_edges_encoding.clone(),
                             &mut sat_encoding_dict,
+                            &settings,
                         )
                     });
             } else {
@@ -209,6 +227,7 @@ fn main() -> Result<(), Error> {
                     &graph,
                     graph_edges_encoding,
                     &mut sat_encoding_dict,
+                    &settings,
                 );
             }
         }

@@ -1,9 +1,18 @@
 //! Debug facilities.
-
+use kissat_rs::Literal;
 use nom::error::VerboseErrorKind;
-use std::io;
+use std::{
+    fmt,
+    io::{self, Write},
+};
 
-use crate::{graph::GraphError, parser::ParseError, statistics::OrbitStatistics};
+use crate::{
+    encoding::{Clause, HighLevelEncoding},
+    graph::GraphError,
+    parser::ParseError,
+    quotient::Orbits,
+    statistics::OrbitStatistics,
+};
 
 // Error type and From<...> implementations
 
@@ -52,20 +61,68 @@ impl From<io::Error> for Error {
     }
 }
 
-// Custom formatter for debug printing
+// Custom debug methods
 
-impl std::fmt::Debug for OrbitStatistics {
+impl fmt::Debug for OrbitStatistics {
     #[cfg(not(tarpaulin_include))]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.orbit_sizes.fmt(f)
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn opt_fmt<T: std::fmt::Debug>(
-    option: &Option<T>,
-    f: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
+fn print_clause<'a>(clause: impl Iterator<Item = &'a Literal>) {
+    print!("(");
+    itertools::Itertools::intersperse(
+        clause.map(|literal| {
+            if *literal < 0 {
+                format!("¬{}", -1 * literal)
+            } else {
+                format!("{}", literal)
+            }
+        }),
+        " ∨ ".to_string(),
+    )
+    .for_each(|part| print!("{}", part));
+
+    println!(") ∧");
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn print_formula(formula: impl Iterator<Item = Clause>) {
+    formula.for_each(|clause| print_clause(clause.iter()));
+    println!("True");
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn print_orbits_nauty_style(orbits: Orbits) {
+    // This is necessary to give a correct
+    // start point for the output.
+    println!("cpu time = 0.00 seconds");
+
+    orbits
+        .encode_high(false)
+        .into_iter()
+        .for_each(|(orbit, members)| {
+            if members.len() > 1 {
+                members.iter().for_each(|member| print!("{} ", member));
+                print!("({}); ", members.len());
+            } else {
+                print!("{}; ", orbit);
+            }
+        });
+
+    // Force new line and flush everything out.
+    println!();
+    std::io::stdout()
+        .flush()
+        .expect("Why would stdout not be flushed?");
+}
+
+// Custom formatter for debug printing
+
+#[cfg(not(tarpaulin_include))]
+pub fn opt_fmt<T: fmt::Debug>(option: &Option<T>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match option {
         Some(val) => val.fmt(f),
         None => write!(f, "None"),
@@ -73,10 +130,10 @@ pub fn opt_fmt<T: std::fmt::Debug>(
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn result_fmt<T: std::fmt::Debug, E: std::fmt::Debug>(
+pub fn result_fmt<T: fmt::Debug, E: fmt::Debug>(
     result: &Result<T, E>,
-    f: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
     match result {
         Ok(val) => val.fmt(f),
         Err(e) => e.fmt(f),
@@ -85,7 +142,7 @@ pub fn result_fmt<T: std::fmt::Debug, E: std::fmt::Debug>(
 
 #[allow(clippy::ptr_arg)]
 #[cfg(not(tarpaulin_include))]
-pub fn bin_fmt(vec: &Vec<u64>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+pub fn bin_fmt(vec: &Vec<u64>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{{")?;
     for number in vec {
         write!(f, "{:#066b}", number)?;

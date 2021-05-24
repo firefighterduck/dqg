@@ -4,12 +4,12 @@
 use custom_debug_derive::Debug;
 use itertools::Itertools;
 use libffi::high::ClosureMut6;
-use nauty_Traces_sys::{densenauty, orbjoin, statsblk};
-use std::{io::Write, os::raw::c_int, slice::from_raw_parts};
+use nauty_Traces_sys::{densenauty, orbjoin, statsblk, FALSE};
+use std::{os::raw::c_int, slice::from_raw_parts};
 
 use crate::{
-    encoding::HighLevelEncoding,
-    graph::{Graph, NautyGraph, Vertex, VertexIndex},
+    graph::{Graph, NautyGraph, Vertex, VertexIndex, DEFAULT_COLOR},
+    Settings,
 };
 
 pub type Generator = Vec<VertexIndex>;
@@ -19,7 +19,10 @@ pub type Orbits = Vec<VertexIndex>;
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
 #[cfg(not(tarpaulin_include))]
-pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Generator> {
+pub fn compute_generators_with_nauty(
+    mut nauty_graph: NautyGraph,
+    settings: &Settings,
+) -> Vec<Generator> {
     let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();
 
@@ -43,6 +46,10 @@ pub fn compute_generators_with_nauty(mut nauty_graph: NautyGraph) -> Vec<Generat
             userautomproc: Some(*userautomproc.code_ptr()),
             ..Default::default()
         };
+        if settings.colored_graph {
+            options.defaultptn = FALSE;
+        }
+
         let mut stats = statsblk::default();
         let mut orbits = vec![0_i32; n];
 
@@ -114,31 +121,6 @@ pub fn generate_orbits(generators: &mut [Generator]) -> Orbits {
     orbits
 }
 
-#[cfg(not(tarpaulin_include))]
-pub fn print_orbits_nauty_style(orbits: Orbits) {
-    // This is necessary to give a correct
-    // start point for the output.
-    println!("cpu time = 0.00 seconds");
-
-    orbits
-        .encode_high(false)
-        .into_iter()
-        .for_each(|(orbit, members)| {
-            if members.len() > 1 {
-                members.iter().for_each(|member| print!("{} ", member));
-                print!("({}); ", members.len());
-            } else {
-                print!("{}; ", orbit);
-            }
-        });
-
-    // Force new line and flush everything out.
-    println!();
-    std::io::stdout()
-        .flush()
-        .expect("Why would stdout not be flushed?");
-}
-
 /// Represents a quotient graph where the vertices are
 /// orbits. It also holds the reference to which original
 /// vertices are part of which orbit.
@@ -180,7 +162,7 @@ impl QuotientGraph {
         } else {
             quotient_graph = Graph::new_ordered(1);
             quotient_graph
-                .set_vertex(Vertex::new(0, -1))
+                .set_vertex(Vertex::new(0, DEFAULT_COLOR))
                 .expect("Single vertex could not be added!");
         }
 
@@ -216,15 +198,15 @@ mod test {
         let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
         assert_eq!(orbits, quotient.orbits);
 
-        let mut expected_vert0 = Vertex::new(0, -1);
+        let mut expected_vert0 = Vertex::new(0, DEFAULT_COLOR);
         expected_vert0.add_edge(1);
         expected_vert0.add_edge(4);
-        let mut expected_vert1 = Vertex::new(1, -1);
+        let mut expected_vert1 = Vertex::new(1, DEFAULT_COLOR);
         expected_vert1.add_edge(0);
         expected_vert1.add_edge(2);
-        let mut expected_vert2 = Vertex::new(2, -1);
+        let mut expected_vert2 = Vertex::new(2, DEFAULT_COLOR);
         expected_vert2.add_edge(1);
-        let mut expected_vert4 = Vertex::new(4, -1);
+        let mut expected_vert4 = Vertex::new(4, DEFAULT_COLOR);
         expected_vert4.add_edge(0);
 
         assert_eq!(4, quotient.quotient_graph.size());
@@ -252,7 +234,7 @@ mod test {
         let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
         assert_eq!(orbits, quotient.orbits);
         assert_eq!(
-            Vertex::new(0, -1),
+            Vertex::new(0, DEFAULT_COLOR),
             *quotient.quotient_graph.get_vertex(0).unwrap()
         );
         assert_eq!(1, quotient.quotient_graph.size());
