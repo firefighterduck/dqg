@@ -30,6 +30,9 @@ struct CommandLineOptions {
     /// outputs these in a nauty-like fashion.
     #[structopt(short = "-o", long)]
     orbits_only: bool,
+    /// Logs all orbit sizes in a HashMap.
+    #[structopt(short = "-l", long)]
+    log_orbits: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -168,6 +171,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
     let settings = Settings {
         iter_powerset: cl_options.iter_powerset,
         orbits_only: cl_options.orbits_only,
+        log_orbits: cl_options.log_orbits,
     };
 
     Ok((graph, statistics, settings))

@@ -1,49 +1,17 @@
+//! Statistics about different parts of the program.
+
 use custom_debug_derive::Debug;
 use itertools::{Itertools, MinMaxResult};
 use std::{
+    collections::HashMap,
     fs::File,
     io::Write,
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-use crate::{graph::VertexIndex, Error};
-
-#[macro_export]
-macro_rules! time {
-    ($i:ident, $ret:ident, $exp:expr) => {
-        let before = std::time::Instant::now();
-        let $ret = $exp;
-        let $i = before.elapsed();
-    };
-}
-
-#[macro_export]
-macro_rules! print_time {
-    ($name:expr, $ret:ident, $exp:expr) => {
-        let before = std::time::Instant::now();
-        let $ret = $exp;
-        println!("{} took {:?}", $name, before.elapsed());
-    };
-}
-
-#[macro_export]
-macro_rules! time_mut {
-    ($i:ident, $ret:ident, $exp:expr) => {
-        let before = std::time::Instant::now();
-        let mut $ret = $exp;
-        let $i = before.elapsed();
-    };
-}
-
-#[macro_export]
-macro_rules! print_time_mut {
-    ($name:expr, $ret:ident, $exp:expr) => {
-        let before = std::time::Instant::now();
-        let mut $ret = $exp;
-        println!("{} took {:?}", $name, before.elapsed());
-    };
-}
+use crate::debug::{opt_fmt, result_fmt};
+use crate::{encoding::OrbitEncoding, graph::VertexIndex, Error};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StatisticsLevel {
@@ -63,18 +31,40 @@ impl From<u64> for StatisticsLevel {
     }
 }
 
+/// Counts how many orbits have the same size.
+/// Stores the as a map from orbit size to number
+/// of orbits with this size.
+#[derive(Default)]
+pub struct OrbitStatistics {
+    pub orbit_sizes: HashMap<usize, usize>,
+}
+
+impl OrbitStatistics {
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_orbit(&mut self, orbit: &OrbitEncoding) {
+        let orbit_size = orbit.1.len();
+        match self.orbit_sizes.get_mut(&orbit_size) {
+            Some(number) => *number += 1,
+            None => {
+                self.orbit_sizes.insert(orbit_size, 1);
+            }
+        };
+    }
+}
+
 #[derive(Debug)]
 pub struct QuotientStatistics {
     pub quotient_size: usize,
     pub max_orbit_size: usize,
     pub min_orbit_size: usize,
+    #[debug(with = "result_fmt")]
     pub descriptive: Result<bool, Error>,
     pub quotient_handling_time: Duration,
     pub kissat_time: Duration,
     pub orbit_gen_time: Duration,
     pub quotient_gen_time: Duration,
     pub encoding_time: Duration,
-    pub log_orbit_time: Duration,
+    pub orbit_sizes: OrbitStatistics,
 }
 
 impl QuotientStatistics {
@@ -102,15 +92,20 @@ pub struct Statistics {
     // Timings
     #[debug(skip)]
     start_time: Instant,
+    #[debug(with = "opt_fmt")]
     nauty_done_time: Option<Duration>,
+    #[debug(with = "opt_fmt")]
     end_time: Option<Duration>,
     // Graph statistics
     graph_size: usize,
+    #[debug(with = "opt_fmt")]
     number_of_generators: Option<usize>,
     max_orbit_size: usize,
     max_quotient_graph_size: usize,
     number_of_descriptive: usize,
+    #[debug(with = "opt_fmt")]
     max_quotient_handling_time: Option<Duration>,
+    #[debug(with = "opt_fmt")]
     max_kissat_time: Option<Duration>,
     quotient_statistics: Vec<QuotientStatistics>,
 }

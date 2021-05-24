@@ -6,70 +6,34 @@
 //! for certain conditions.
 
 use itertools::Itertools;
-use std::{io, time::Instant};
+use std::time::Instant;
 
 mod graph;
-use graph::{Graph, GraphError, VertexIndex};
+use graph::{Graph, VertexIndex};
 
 mod input;
 use input::read_graph;
 
 mod quotient;
-use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
+use quotient::{
+    compute_generators_with_nauty, generate_orbits, print_orbits_nauty_style, QuotientGraph,
+};
 
 mod encoding;
-use encoding::{encode_graph_edges, encode_problem, Formula, SATEncodingDictionary};
+use encoding::{
+    encode_graph_edges, encode_problem, Formula, HighLevelEncoding, SATEncodingDictionary,
+};
 
 mod sat_solving;
 use sat_solving::solve;
 
 mod parser;
-use parser::ParseError;
 
 mod statistics;
-use statistics::{QuotientStatistics, Statistics};
+use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
-use crate::quotient::print_orbits_nauty_style;
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Graph initialization error")]
-    GraphError(GraphError),
-    #[error("Error while parsing input file with graph description")]
-    ParseError,
-    #[error("Error while parsing graph from command line")]
-    CLIParseError(io::Error),
-    #[error("Error while calling Kissat")]
-    KissatError(kissat_rs::Error),
-}
-
-impl From<GraphError> for Error {
-    #[cfg(not(tarpaulin_include))]
-    fn from(ge: GraphError) -> Self {
-        Self::GraphError(ge)
-    }
-}
-
-impl<'a> From<nom::Err<ParseError<'a>>> for Error {
-    #[cfg(not(tarpaulin_include))]
-    fn from(_: nom::Err<ParseError<'a>>) -> Self {
-        Self::ParseError
-    }
-}
-
-impl From<kissat_rs::Error> for Error {
-    #[cfg(not(tarpaulin_include))]
-    fn from(ke: kissat_rs::Error) -> Self {
-        Self::KissatError(ke)
-    }
-}
-
-impl From<io::Error> for Error {
-    #[cfg(not(tarpaulin_include))]
-    fn from(ie: io::Error) -> Self {
-        Self::CLIParseError(ie)
-    }
-}
+mod debug;
+pub use debug::Error;
 
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
@@ -86,6 +50,8 @@ pub struct Settings {
     pub iter_powerset: bool,
     /// Compute only orbits.
     pub orbits_only: bool,
+    /// Log orbit sizes.
+    pub log_orbits: bool,
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -94,17 +60,25 @@ fn compute_quotient_with_statistics(
     graph: &Graph,
     graph_edges_encoding: Formula,
     sat_encoding_dict: &mut SATEncodingDictionary,
+    settings: &Settings,
     statistics: &mut Statistics,
 ) {
     let start_time = Instant::now();
 
     time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
     time!(
-        log_orbit_time,
+        _log_orbit_time,
         min_max_orbit_size,
         QuotientStatistics::log_orbit_sizes(&orbits)
     );
     let (min_orbit_size, max_orbit_size) = min_max_orbit_size;
+
+    let mut orbit_sizes = OrbitStatistics::default();
+    if settings.log_orbits {
+        for orbit in orbits.encode_high(false) {
+            orbit_sizes.log_orbit(&orbit);
+        }
+    }
 
     time!(
         quotient_gen_time,
@@ -132,7 +106,7 @@ fn compute_quotient_with_statistics(
         orbit_gen_time,
         quotient_gen_time,
         encoding_time,
-        log_orbit_time,
+        orbit_sizes,
     };
     statistics.log_quotient_statistic(quotient_stats);
 }
@@ -196,6 +170,7 @@ fn main() -> Result<(), Error> {
                         &graph,
                         graph_edges_encoding.clone(),
                         &mut sat_encoding_dict,
+                        &settings,
                         &mut statistics,
                     )
                 });
@@ -205,6 +180,7 @@ fn main() -> Result<(), Error> {
                 &graph,
                 graph_edges_encoding,
                 &mut sat_encoding_dict,
+                &settings,
                 &mut statistics,
             );
         }

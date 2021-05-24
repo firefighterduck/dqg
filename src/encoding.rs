@@ -65,7 +65,7 @@ impl HighLevelEncoding for Graph {
     }
 }
 
-type OrbitEncoding = (VertexIndex, Vec<VertexIndex>);
+pub type OrbitEncoding = (VertexIndex, Vec<VertexIndex>);
 
 impl HighLevelEncoding for Orbits {
     type HighLevelRepresentation = Vec<OrbitEncoding>;

@@ -112,7 +112,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
         bytes::complete::tag,
         character::complete::{multispace1, space0},
         combinator::complete,
-        multi::separated_list1,
+        multi::{separated_list0, separated_list1},
         sequence::tuple,
     };
 
@@ -122,7 +122,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
     let sep = |sep_tag| tuple((space0, tag(sep_tag), space0));
 
     let single_colour = separated_list1(sep(","), parse_vertex_index);
-    let mut colour_list = separated_list1(sep("|"), single_colour);
+    let mut colour_list = separated_list0(sep("|"), single_colour);
 
     let (input, _) = tag("f=[")(input)?;
     let (input, colour_list) = colour_list(input)?;

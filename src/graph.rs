@@ -6,6 +6,8 @@ use custom_debug_derive::Debug;
 use nauty_Traces_sys::{empty_graph, ADDONEARC, SETWORDSNEEDED};
 use std::os::raw::c_int;
 
+use crate::debug::bin_fmt;
+
 pub type Colour = c_int;
 pub type VertexIndex = c_int;
 
@@ -35,18 +37,6 @@ pub struct Vertex {
     pub index: VertexIndex,
     pub edges_to: Vec<VertexIndex>,
     pub colour: Colour,
-}
-
-#[allow(clippy::ptr_arg)]
-#[cfg(not(tarpaulin_include))]
-pub fn bin_fmt(vec: &Vec<u64>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{{")?;
-    for number in vec {
-        write!(f, "{:#066b}", number)?;
-    }
-    write!(f, "}}")?;
-
-    Ok(())
 }
 
 #[derive(Debug)]
