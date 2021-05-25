@@ -101,7 +101,7 @@ pub fn print_orbits_nauty_style(orbits: Orbits) {
     println!("cpu time = 0.00 seconds");
 
     orbits
-        .encode_high(false)
+        .encode_high()
         .into_iter()
         .for_each(|(orbit, members)| {
             if members.len() > 1 {

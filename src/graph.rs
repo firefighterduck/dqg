@@ -138,15 +138,10 @@ impl Graph {
         self.add_arc(end, start)
     }
 
-    pub fn iterate_edges<F>(&self, mut f: F)
-    where
-        F: FnMut((&VertexIndex, &VertexIndex)),
-    {
-        for vertex in self.vertices.iter() {
-            for end in vertex.edges_to.iter() {
-                f((&vertex.index, end));
-            }
-        }
+    pub fn iterate_edges(&self) -> impl Iterator<Item = (VertexIndex, VertexIndex)> + '_ {
+        self.vertices
+            .iter()
+            .flat_map(|vertex| vertex.edges_to.iter().map(move |end| (vertex.index, *end)))
     }
 
     /// Remove unneccessary edges.

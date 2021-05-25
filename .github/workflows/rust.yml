@@ -100,7 +100,7 @@ jobs:
         run: sudo apt-get install nauty libnauty2-dev -y
 
       - name: Use flamegraph
-        run: cargo flamegraph -c "record -F 997 --call-graph dwarf -g -o ./perf.dataa" ./example.dre
+        run: cargo flamegraph -c "record -F 997 --call-graph dwarf -g -o ./perf.data" -- -pclss ./example.dre
 
       - name: Upload flamegraph.svg
         uses: actions/upload-artifact@v2

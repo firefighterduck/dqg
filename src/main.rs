@@ -18,9 +18,7 @@ mod quotient;
 use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
 
 mod encoding;
-use encoding::{
-    encode_graph_edges, encode_problem, Formula, HighLevelEncoding, SATEncodingDictionary,
-};
+use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
 use sat_solving::solve;
@@ -44,6 +42,7 @@ where
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Settings {
     /// Iterate the whole powerset.
     pub iter_powerset: bool,
@@ -62,8 +61,6 @@ pub struct Settings {
 fn compute_quotient_with_statistics(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
-    graph_edges_encoding: Formula,
-    sat_encoding_dict: &mut SATEncodingDictionary,
     settings: &Settings,
     statistics: &mut Statistics,
 ) {
@@ -79,7 +76,7 @@ fn compute_quotient_with_statistics(
 
     let mut orbit_sizes = OrbitStatistics::default();
     if settings.log_orbits {
-        for orbit in orbits.encode_high(false) {
+        for orbit in orbits.encode_high() {
             orbit_sizes.log_orbit(&orbit);
         }
     }
@@ -94,55 +91,61 @@ fn compute_quotient_with_statistics(
     time!(
         encoding_time,
         formula,
-        encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict)
+        encode_problem(graph, &quotient_graph)
     );
 
-    if settings.print_formula {
-        print_formula(formula);
-        return;
+    if let Some(formula) = formula {
+        if settings.print_formula {
+            print_formula(formula);
+            return;
+        }
+
+        time!(kissat_time, descriptive, solve(formula));
+
+        let quotient_handling_time = start_time.elapsed();
+        let quotient_stats = QuotientStatistics {
+            quotient_size,
+            max_orbit_size,
+            min_orbit_size,
+            descriptive,
+            quotient_handling_time,
+            kissat_time,
+            orbit_gen_time,
+            quotient_gen_time,
+            encoding_time,
+            orbit_sizes,
+        };
+        statistics.log_quotient_statistic(quotient_stats);
+    } else {
+        println!("Trivially descriptive");
     }
-
-    time!(kissat_time, descriptive, solve(formula));
-
-    let quotient_handling_time = start_time.elapsed();
-    let quotient_stats = QuotientStatistics {
-        quotient_size,
-        max_orbit_size,
-        min_orbit_size,
-        descriptive,
-        quotient_handling_time,
-        kissat_time,
-        orbit_gen_time,
-        quotient_gen_time,
-        encoding_time,
-        orbit_sizes,
-    };
-    statistics.log_quotient_statistic(quotient_stats);
 }
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
-    graph_edges_encoding: Formula,
-    sat_encoding_dict: &mut SATEncodingDictionary,
     settings: &Settings,
 ) {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
 
-    let formula = encode_problem(&quotient_graph, graph_edges_encoding, sat_encoding_dict);
+    let formula = encode_problem(graph, &quotient_graph);
 
-    if settings.print_formula {
-        print_formula(formula);
-        return;
-    }
+    if let Some(formula) = formula {
+        if settings.print_formula {
+            print_formula(formula);
+            return;
+        }
 
-    let descriptive = solve(formula);
+        let descriptive = solve(formula);
 
-    if descriptive.is_ok() && !descriptive.unwrap() {
-        eprintln!("Found a non descriptive quotient!");
+        if descriptive.is_ok() && !descriptive.unwrap() {
+            eprintln!("Found a non descriptive quotient!");
+        }
+    } else {
+        println!("Trivially descriptive");
     }
 }
 
@@ -169,10 +172,6 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    // ... generate the shared encoding of the input graph and ...
-    let mut sat_encoding_dict = SATEncodingDictionary::new();
-    let graph_edges_encoding = encode_graph_edges(&graph, &mut sat_encoding_dict);
-
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {
         // ... with statistics ...
@@ -185,51 +184,26 @@ fn main() -> Result<(), Error> {
                     compute_quotient_with_statistics(
                         &mut subset,
                         &graph,
-                        graph_edges_encoding.clone(),
-                        &mut sat_encoding_dict,
                         &settings,
                         &mut statistics,
                     )
                 });
-        } else {
-            compute_quotient_with_statistics(
-                &mut generators,
-                &graph,
-                graph_edges_encoding,
-                &mut sat_encoding_dict,
-                &settings,
-                &mut statistics,
-            );
+        } else if !generators.is_empty() {
+            compute_quotient_with_statistics(&mut generators, &graph, &settings, &mut statistics);
         }
 
         statistics.log_end();
         statistics.save_statistics()?;
     } else {
         // ... or without.
-        {
-            if settings.iter_powerset {
-                generators
-                    .into_iter()
-                    .powerset()
-                    .skip(1)
-                    .for_each(|mut subset| {
-                        compute_quotient(
-                            &mut subset,
-                            &graph,
-                            graph_edges_encoding.clone(),
-                            &mut sat_encoding_dict,
-                            &settings,
-                        )
-                    });
-            } else {
-                compute_quotient(
-                    &mut generators,
-                    &graph,
-                    graph_edges_encoding,
-                    &mut sat_encoding_dict,
-                    &settings,
-                );
-            }
+        if settings.iter_powerset {
+            generators
+                .into_iter()
+                .powerset()
+                .skip(1)
+                .for_each(|mut subset| compute_quotient(&mut subset, &graph, &settings));
+        } else if !generators.is_empty() {
+            compute_quotient(&mut generators, &graph, &settings);
         }
     }
 

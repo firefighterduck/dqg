@@ -18,7 +18,6 @@ pub type Orbits = Vec<VertexIndex>;
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
-#[cfg(not(tarpaulin_include))]
 pub fn compute_generators_with_nauty(
     mut nauty_graph: NautyGraph,
     settings: &Settings,
@@ -147,9 +146,9 @@ impl QuotientGraph {
             quotient_graph = Graph::new_with_indices(&unique_orbits);
             // Add edges between the orbits if single vertices in these are
             // connected by and edge. Doesn't add edges within the same orbit.
-            graph.iterate_edges(|(start, end)| {
-                let start_orbit = get_orbit(&orbits, *start);
-                let end_orbit = get_orbit(&orbits, *end);
+            graph.iterate_edges().for_each(|(start, end)| {
+                let start_orbit = get_orbit(&orbits, start);
+                let end_orbit = get_orbit(&orbits, end);
                 if start_orbit != end_orbit {
                     quotient_graph
                         .add_arc(start_orbit, end_orbit)
@@ -176,6 +175,7 @@ impl QuotientGraph {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::graph::GraphError;
 
     #[test]
     fn test_from_graph_orbits() {
@@ -255,5 +255,40 @@ mod test {
         let mut generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
         let orbits = generate_orbits(&mut generators);
         assert_eq!(orbits, vec![0, 1, 2, 1, 4, 0, 1, 0]);
+    }
+
+    #[test]
+    fn test_compute_generators_with_nauty() -> Result<(), GraphError> {
+        let settings = Settings {
+            colored_graph: true,
+            ..Default::default()
+        };
+
+        let mut graph = Graph::new_ordered(8);
+        graph.add_edge(0, 1)?;
+        graph.add_edge(0, 3)?;
+        graph.add_edge(0, 4)?;
+        graph.add_edge(1, 2)?;
+        graph.add_edge(1, 5)?;
+        graph.add_edge(2, 3)?;
+        graph.add_edge(2, 6)?;
+        graph.add_edge(3, 7)?;
+        graph.add_edge(4, 5)?;
+        graph.add_edge(4, 7)?;
+        graph.add_edge(5, 6)?;
+        graph.add_edge(6, 7)?;
+
+        let order = [2, 0, 1, 3, 4, 5, 6, 7];
+        let colours = [2, 2, 1, 2, 2, 2, 2, 2];
+        graph.set_colours(&colours)?;
+        graph.order(&order)?;
+        let nauty_graph = graph.prepare_nauty();
+        assert!(nauty_graph.check_valid());
+
+        let expected_generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
+        let generators = compute_generators_with_nauty(nauty_graph, &settings);
+        assert_eq!(expected_generators, generators);
+
+        Ok(())
     }
 }
