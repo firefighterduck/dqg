@@ -138,8 +138,10 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
     Ok((rest, colours))
 }
 
-pub fn parse_dreadnaut_input(input: Input<'_>) -> Result<Graph, Error> {
-    let (input, _) = parse_header(input)?;
+pub fn parse_dreadnaut_input(input: Input<'_>) -> Result<(Graph, bool), Error> {
+    use nom::combinator::opt;
+
+    let (input, header) = opt(parse_header)(input)?;
     let (mut input, graph_size) = parse_graph_size(input)?;
     let mut graph = Graph::new_ordered(graph_size);
 
@@ -161,7 +163,7 @@ pub fn parse_dreadnaut_input(input: Input<'_>) -> Result<Graph, Error> {
     let (_, colours) = parse_colouring(graph_size, input)?;
     graph.set_colours(&colours)?;
 
-    Ok(graph)
+    Ok((graph, header.is_some()))
 }
 
 #[cfg(test)]
@@ -252,7 +254,31 @@ f=[0|1, 2] x o
             .set_colours(&vec![1, 2, 2, DEFAULT_COLOR])
             .unwrap();
 
-        let parsed_graph = parse_dreadnaut_input(test_file).unwrap();
+        let (parsed_graph, has_header) = parse_dreadnaut_input(test_file).unwrap();
         assert_eq!(expected_graph, parsed_graph);
+        assert!(has_header);
+    }
+
+    #[test]
+    fn test_parse_dreadnaut_input_wo_header() {
+        let test_file = r"n=4 g
+0:1 2 ;
+2:3;
+3:0.
+f=[0|1, 2] x o
+
+        ";
+        let mut expected_graph = Graph::new_ordered(4);
+        expected_graph.add_edge(0, 1).unwrap();
+        expected_graph.add_edge(0, 2).unwrap();
+        expected_graph.add_edge(2, 3).unwrap();
+        expected_graph.add_edge(3, 0).unwrap();
+        expected_graph
+            .set_colours(&vec![1, 2, 2, DEFAULT_COLOR])
+            .unwrap();
+
+        let (parsed_graph, has_header) = parse_dreadnaut_input(test_file).unwrap();
+        assert_eq!(expected_graph, parsed_graph);
+        assert!(!has_header);
     }
 }

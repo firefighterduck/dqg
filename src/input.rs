@@ -14,7 +14,7 @@ use crate::{
     graph::{Graph, VertexIndex},
     parser::parse_dreadnaut_input,
     statistics::{Statistics, StatisticsLevel},
-    Error, Settings,
+    Error, NautyTraces, Settings,
 };
 
 #[derive(StructOpt, Debug)]
@@ -40,6 +40,10 @@ struct CommandLineOptions {
     /// included in the nauty computation.
     #[structopt(short = "-c", long)]
     colored_graph: bool,
+    /// Use traces instead of nauty to compute
+    /// the graphs automorphism group.
+    #[structopt(short = "-t", long)]
+    use_traces: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -119,6 +123,7 @@ with the next vertex or a `.` to end inputting edges.", index, index);
 #[cfg(not(tarpaulin_include))]
 pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
     let cl_options = CommandLineOptions::from_args();
+    let mut use_traces = cl_options.use_traces;
     let mut graph;
     let mut out_file;
     let statistics;
@@ -126,7 +131,9 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
     if let Some(path_to_graph_file) = cl_options.input {
         // Either read the graph from a file ..
         let file = read_to_string(&path_to_graph_file)?;
-        graph = parse_dreadnaut_input(&file)?;
+        let (parsed_graph, has_header) = parse_dreadnaut_input(&file)?;
+        use_traces |= has_header;
+        graph = parsed_graph;
 
         out_file = path_to_graph_file;
         out_file.set_extension("dqg");
@@ -147,7 +154,9 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
                     line.iter().for_each(|line| acc.push_str(line));
                     acc
                 });
-            graph = parse_dreadnaut_input(&file)?;
+            let (parsed_graph, has_header) = parse_dreadnaut_input(&file)?;
+            use_traces |= has_header;
+            graph = parsed_graph;
         } else {
             // .... or the interactive command line interface.
             graph = read_graph_empty(&stdin)?;
@@ -181,6 +190,11 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         log_orbits: cl_options.log_orbits,
         print_formula: cl_options.print_formula,
         colored_graph: cl_options.colored_graph,
+        nauyt_or_traces: if use_traces {
+            NautyTraces::Traces
+        } else {
+            NautyTraces::Nauty
+        },
     };
 
     Ok((graph, statistics, settings))

@@ -8,7 +8,11 @@ pub fn solve(formula: impl Iterator<Item = Clause>) -> Result<bool, Error> {
 
 #[cfg(test)]
 mod test {
-    use crate::{encoding::encode_problem, graph::Graph, quotient::QuotientGraph};
+    use crate::{
+        encoding::{cache_graph_edges, encode_problem, EdgeCache},
+        graph::Graph,
+        quotient::QuotientGraph,
+    };
 
     use super::*;
 
@@ -21,12 +25,14 @@ mod test {
         graph.add_edge(2, 3)?;
         let colors = vec![1, 2, 2, 3];
         graph.set_colours(&colors)?;
+        let mut cache = EdgeCache::new(graph.size());
+        cache_graph_edges(&graph, &mut cache);
 
         // Not the actual orbits, but used to check for non-descriptiveness.
         let fake_orbits = vec![0, 1, 1, 3];
         let quotient = QuotientGraph::from_graph_orbits(&graph, fake_orbits);
 
-        let formula = encode_problem(&graph, &quotient);
+        let formula = encode_problem(&quotient, &cache);
 
         let result = solve(formula.unwrap());
         assert!(result.is_ok());

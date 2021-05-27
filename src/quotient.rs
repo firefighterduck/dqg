@@ -89,7 +89,7 @@ fn apply_generator(generator: &mut [VertexIndex], orbits: &mut Orbits) {
     }
 }
 
-fn empty_orbits(number_vertices: usize) -> Orbits {
+pub fn empty_orbits(number_vertices: usize) -> Orbits {
     let mut orbits = Vec::with_capacity(number_vertices);
 
     for vertex in 0..number_vertices {

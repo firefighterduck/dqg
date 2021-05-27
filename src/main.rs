@@ -18,7 +18,7 @@ mod quotient;
 use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
 
 mod encoding;
-use encoding::{encode_problem, HighLevelEncoding};
+use encoding::{encode_problem, EdgeCache, HighLevelEncoding};
 
 mod sat_solving;
 use sat_solving::solve;
@@ -32,6 +32,11 @@ mod debug;
 pub use debug::Error;
 use debug::{print_formula, print_orbits_nauty_style};
 
+use crate::{
+    encoding::cache_graph_edges,
+    quotient::{empty_orbits, Orbits},
+};
+
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
 where
@@ -39,6 +44,20 @@ where
 {
     if let Some(val) = optional {
         f(val);
+    }
+}
+
+#[derive(Debug)]
+pub enum NautyTraces {
+    /// Called for dense graphs
+    Nauty,
+    /// Called for sparse graphs
+    Traces,
+}
+
+impl Default for NautyTraces {
+    fn default() -> Self {
+        Self::Nauty
     }
 }
 
@@ -55,12 +74,15 @@ pub struct Settings {
     /// Graph is colored and colors should be
     /// included in the nauty computation.
     pub colored_graph: bool,
+    ///  Call nauty or traces.
+    pub nauyt_or_traces: NautyTraces,
 }
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
+    edge_cache: &EdgeCache,
     settings: &Settings,
     statistics: &mut Statistics,
 ) {
@@ -91,7 +113,7 @@ fn compute_quotient_with_statistics(
     time!(
         encoding_time,
         formula,
-        encode_problem(graph, &quotient_graph)
+        encode_problem(&quotient_graph, edge_cache)
     );
 
     if let Some(formula) = formula {
@@ -125,13 +147,14 @@ fn compute_quotient_with_statistics(
 fn compute_quotient(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
+    edge_cache: &EdgeCache,
     settings: &Settings,
 ) {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
 
-    let formula = encode_problem(graph, &quotient_graph);
+    let formula = encode_problem(&quotient_graph, edge_cache);
 
     if let Some(formula) = formula {
         if settings.print_formula {
@@ -167,10 +190,20 @@ fn main() -> Result<(), Error> {
 
     if settings.orbits_only {
         // TODO apply heuristic beforehand
-        let orbits = generate_orbits(&mut generators);
+        let orbits: Orbits;
+
+        if generators.is_empty() {
+            orbits = empty_orbits(graph.size());
+        } else {
+            orbits = generate_orbits(&mut generators);
+        }
+
         print_orbits_nauty_style(orbits);
         return Ok(());
     }
+
+    let mut edge_cache = EdgeCache::new(graph.size());
+    cache_graph_edges(&graph, &mut edge_cache);
 
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {
@@ -184,12 +217,19 @@ fn main() -> Result<(), Error> {
                     compute_quotient_with_statistics(
                         &mut subset,
                         &graph,
+                        &edge_cache,
                         &settings,
                         &mut statistics,
                     )
                 });
         } else if !generators.is_empty() {
-            compute_quotient_with_statistics(&mut generators, &graph, &settings, &mut statistics);
+            compute_quotient_with_statistics(
+                &mut generators,
+                &graph,
+                &edge_cache,
+                &settings,
+                &mut statistics,
+            );
         }
 
         statistics.log_end();
@@ -201,9 +241,11 @@ fn main() -> Result<(), Error> {
                 .into_iter()
                 .powerset()
                 .skip(1)
-                .for_each(|mut subset| compute_quotient(&mut subset, &graph, &settings));
+                .for_each(|mut subset| {
+                    compute_quotient(&mut subset, &graph, &edge_cache, &settings)
+                });
         } else if !generators.is_empty() {
-            compute_quotient(&mut generators, &graph, &settings);
+            compute_quotient(&mut generators, &graph, &edge_cache, &settings);
         }
     }
 
