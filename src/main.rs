@@ -15,7 +15,9 @@ mod input;
 use input::read_graph;
 
 mod quotient;
-use quotient::{compute_generators_with_nauty, generate_orbits, QuotientGraph};
+use quotient::{
+    compute_generators_with_nauty, compute_generators_with_traces, generate_orbits, QuotientGraph,
+};
 
 mod encoding;
 use encoding::{encode_problem, EdgeCache, HighLevelEncoding};
@@ -176,12 +178,21 @@ fn compute_quotient(
 fn main() -> Result<(), Error> {
     // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
+    let mut generators;
 
-    // ... compute the generators with nauty. Then ...
-    let nauty_graph = graph.prepare_nauty();
+    // ... compute the generators with nauty or Traces. Then ...
+    match settings.nauyt_or_traces {
+        NautyTraces::Nauty => {
+            let nauty_graph = graph.prepare_nauty();
 
-    assert!(nauty_graph.check_valid());
-    let mut generators = compute_generators_with_nauty(nauty_graph, &settings);
+            assert!(nauty_graph.check_valid());
+            generators = compute_generators_with_nauty(nauty_graph, &settings);
+        }
+        NautyTraces::Traces => {
+            let traces_graph = graph.prepare_traces();
+            generators = compute_generators_with_traces(traces_graph, &settings);
+        }
+    };
 
     do_if_some(&mut statistics, Statistics::log_nauty_done);
     do_if_some(&mut statistics, |st| {

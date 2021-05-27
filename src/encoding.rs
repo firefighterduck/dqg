@@ -316,7 +316,8 @@ mod test {
         graph.add_arc(2, 1)?;
         let orbits = vec![0, 1, 0];
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let cache = EdgeCache::new(0);
+        let mut cache = EdgeCache::new(2);
+        cache_graph_edges(&graph, &mut cache);
 
         let formula = encode_problem(&quotient_graph, &cache);
         assert!(formula.is_none());

@@ -3,8 +3,9 @@
 //! simple building blocks or switch to
 //! to a representation understand by nauty.
 use custom_debug_derive::Debug;
-use nauty_Traces_sys::{empty_graph, ADDONEARC, SETWORDSNEEDED};
-use std::os::raw::c_int;
+use itertools::Itertools;
+use nauty_Traces_sys::{empty_graph, SparseGraph, ADDONEARC, SETWORDSNEEDED};
+use std::{convert::TryInto, os::raw::c_int};
 
 use crate::debug::bin_fmt;
 
@@ -12,6 +13,18 @@ pub type Colour = c_int;
 pub type VertexIndex = c_int;
 
 pub const DEFAULT_COLOR: Colour = c_int::MAX;
+
+fn encode_colours(partition: &mut [Colour]) {
+    let mut last_colour = c_int::MIN; // Negative numbers should not arise or if they do, they should be bigger than this.
+    for colour in partition.iter_mut().rev() {
+        if *colour != last_colour {
+            last_colour = *colour;
+            *colour = 0;
+        } else {
+            *colour = 1;
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct GraphError(VertexIndex);
@@ -46,6 +59,16 @@ pub struct NautyGraph {
     /// actual graph
     #[debug(with = "bin_fmt")]
     pub adjacency_matrix: Vec<u64>,
+    /// lab
+    pub vertex_order: Vec<VertexIndex>,
+    /// ptn aka the colouring
+    pub partition: Vec<VertexIndex>,
+}
+
+#[derive(Debug)]
+pub struct TracesGraph {
+    /// actual graph
+    pub sparse_graph: SparseGraph,
     /// lab
     pub vertex_order: Vec<VertexIndex>,
     /// ptn aka the colouring
@@ -227,17 +250,52 @@ impl Graph {
             }
         }
 
-        let mut last_colour = c_int::MIN; // Negative numbers should not arise or if they do, they should be bigger than this.
-        for colour in nauty_graph.partition.iter_mut().rev() {
-            if *colour != last_colour {
-                last_colour = *colour;
-                *colour = 0;
-            } else {
-                *colour = 1;
+        encode_colours(&mut nauty_graph.partition);
+
+        nauty_graph
+    }
+
+    pub fn prepare_traces(&mut self) -> TracesGraph {
+        let number_vertices = self.vertices.len();
+        let number_edges = self.iterate_edges().count();
+
+        let mut traces_graph = TracesGraph {
+            sparse_graph: SparseGraph::new(number_vertices, number_edges),
+            vertex_order: Vec::with_capacity(number_vertices),
+            partition: Vec::with_capacity(number_vertices),
+        };
+
+        if self.state != GraphState::Fixed {
+            self.sort();
+            self.group_colours();
+        }
+
+        // Encode order and colors
+        for vertex in self.vertices.iter() {
+            traces_graph.vertex_order.push(vertex.index);
+            traces_graph.partition.push(vertex.colour);
+        }
+        encode_colours(&mut traces_graph.partition);
+
+        // Encode graph. Vertices must be ordered with increasing indices.
+        let mut edge_counter = 0usize;
+        for (index, vertex) in self
+            .vertices
+            .iter()
+            .sorted_by(|a, b| a.index.cmp(&b.index))
+            .enumerate()
+        {
+            assert_eq!(index as i32, vertex.index);
+            traces_graph.sparse_graph.d[index] = vertex.edges_to.len().try_into().unwrap();
+            traces_graph.sparse_graph.v[index] = edge_counter.try_into().unwrap();
+
+            for end in vertex.edges_to.iter() {
+                traces_graph.sparse_graph.e[edge_counter] = *end;
+                edge_counter += 1;
             }
         }
 
-        nauty_graph
+        traces_graph
     }
 }
 
@@ -271,7 +329,9 @@ impl NautyGraph {
 
 #[cfg(test)]
 mod test {
-    use nauty_Traces_sys::{densenauty, optionblk, statsblk, FALSE};
+    use nauty_Traces_sys::{
+        densenauty, optionblk, statsblk, Traces, TracesOptions, TracesStats, FALSE,
+    };
 
     use super::*;
 
@@ -457,6 +517,55 @@ mod test {
         }
 
         assert_eq!(orbits, [0, 0, 0, 0, 0, 0, 0, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn correct_traces_repr() -> Result<(), GraphError> {
+        let mut graph = Graph::new_ordered(8);
+        graph.add_edge(0, 1)?;
+        graph.add_edge(0, 3)?;
+        graph.add_edge(0, 4)?;
+        graph.add_edge(1, 2)?;
+        graph.add_edge(1, 5)?;
+        graph.add_edge(2, 3)?;
+        graph.add_edge(2, 6)?;
+        graph.add_edge(3, 7)?;
+        graph.add_edge(4, 5)?;
+        graph.add_edge(4, 7)?;
+        graph.add_edge(5, 6)?;
+        graph.add_edge(6, 7)?;
+
+        let order = [2, 1, 0, 3, 4, 5, 6, 7];
+        let colours = [2, 2, 1, 2, 2, 2, 2, 2];
+        graph.set_colours(&colours)?;
+        graph.order(&order)?;
+
+        let mut traces_graph = graph.prepare_traces();
+        assert_eq!(traces_graph.vertex_order, order);
+        assert_eq!(traces_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
+        dbg!(&traces_graph);
+
+        let mut options = TracesOptions::default();
+        options.defaultptn = FALSE;
+        options.digraph = FALSE;
+        options.getcanon = FALSE;
+        let mut stats = TracesStats::default();
+        let mut orbits = vec![0; 8];
+
+        unsafe {
+            Traces(
+                &mut (&mut traces_graph.sparse_graph).into(),
+                traces_graph.vertex_order.as_mut_ptr(),
+                traces_graph.partition.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                std::ptr::null_mut(),
+            );
+        }
+
+        assert_eq!(orbits, [0, 1, 2, 1, 4, 0, 1, 0]);
         Ok(())
     }
 }
