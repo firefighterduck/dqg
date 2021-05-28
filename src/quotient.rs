@@ -366,21 +366,21 @@ mod test {
         graph.order(&order)?;
 
         // Test dense nauty
-        let nauty_graph = graph.prepare_nauty();
+        let nauty_graph = NautyGraph::from_graph(&mut graph);
         assert!(nauty_graph.check_valid());
         let expected_generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
         let generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
         assert_eq!(expected_generators, generators);
 
         // Test sparse nauty
-        let sparse_nauty_graph = graph.prepare_sparse_nauty();
+        let sparse_nauty_graph = SparseNautyGraph::from_graph(&mut graph);
         let expected_generators = vec![vec![0, 3, 2, 1, 4, 7, 6, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
         let generators =
             compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
         assert_eq!(expected_generators, generators);
 
         // Test traces
-        let traces_graph = graph.prepare_traces();
+        let traces_graph = TracesGraph::from_graph(&mut graph);
         let expected_generators = vec![vec![7, 3, 2, 6, 4, 0, 1, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
         let generators = compute_generators_with_traces(traces_graph, &settings);
         assert_eq!(expected_generators, generators);

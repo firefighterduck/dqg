@@ -9,7 +9,7 @@ use itertools::{Either, Itertools};
 use std::time::Instant;
 
 mod graph;
-use graph::{Graph, VertexIndex};
+use graph::{Graph, SparseNautyGraph, TracesGraph, VertexIndex};
 
 mod input;
 use input::read_graph;
@@ -36,6 +36,7 @@ use debug::{print_formula, print_orbits_nauty_style};
 
 use crate::{
     encoding::cache_graph_edges,
+    graph::NautyGraph,
     quotient::{empty_orbits, Orbits},
 };
 
@@ -185,18 +186,18 @@ fn main() -> Result<(), Error> {
     // ... compute the generators with nauty or Traces. Then ...
     match settings.nauyt_or_traces {
         NautyTraces::Nauty => {
-            let nauty_graph = graph.prepare_nauty();
+            let nauty_graph = NautyGraph::from_graph(&mut graph);
 
             assert!(nauty_graph.check_valid());
             generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
         }
         NautyTraces::SparseNauty => {
-            let sparse_nauty_graph = graph.prepare_sparse_nauty();
+            let sparse_nauty_graph = SparseNautyGraph::from_graph(&mut graph);
             generators =
                 compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
         }
         NautyTraces::Traces => {
-            let traces_graph = graph.prepare_traces();
+            let traces_graph = TracesGraph::from_graph(&mut graph);
             generators = compute_generators_with_traces(traces_graph, &settings);
         }
     };
