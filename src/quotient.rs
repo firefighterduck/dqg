@@ -2,13 +2,15 @@
 //! a set of generators and manage the orbits.
 
 use custom_debug_derive::Debug;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use libffi::high::{ClosureMut3, ClosureMut6};
-use nauty_Traces_sys::{densenauty, orbjoin, statsblk, Traces, TracesStats, FALSE};
+use nauty_Traces_sys::{
+    densenauty, optionblk, orbjoin, sparsenauty, statsblk, Traces, TracesStats, FALSE,
+};
 use std::{os::raw::c_int, slice::from_raw_parts};
 
 use crate::{
-    graph::{Graph, NautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
+    graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     Settings,
 };
 
@@ -19,11 +21,33 @@ pub type Orbits = Vec<VertexIndex>;
 /// and compute the generators of the automorphism group
 /// for the graph. Return the generators.
 pub fn compute_generators_with_nauty(
-    mut nauty_graph: NautyGraph,
+    nauty_graph: Either<NautyGraph, SparseNautyGraph>,
     settings: &Settings,
 ) -> Vec<Generator> {
-    let (n, m) = nauty_graph.graph_repr_sizes();
     let mut generators = Vec::new();
+    let (n, m);
+    let mut options;
+
+    match nauty_graph {
+        Either::Left(ref dense_nauty_graph) => {
+            let nm = dense_nauty_graph.graph_repr_sizes();
+            n = nm.0;
+            m = nm.1;
+            options = optionblk::default();
+        }
+        Either::Right(ref sparse_nauty_graph) => {
+            n = sparse_nauty_graph.partition.len();
+            m = 0;
+            options = optionblk::default_sparse();
+        }
+    }
+
+    if settings.colored_graph {
+        options.defaultptn = FALSE;
+    }
+
+    let mut stats = statsblk::default();
+    let mut orbits = vec![0_i32; n];
 
     // Limit how long the closure can reference generators so that we can return it afterwards.
     {
@@ -41,31 +65,35 @@ pub fn compute_generators_with_nauty(
             };
         let userautomproc = ClosureMut6::new(&mut userautomproc);
 
-        let mut options = nauty_Traces_sys::optionstruct {
-            userautomproc: Some(*userautomproc.code_ptr()),
-            ..Default::default()
-        };
-        if settings.colored_graph {
-            options.defaultptn = FALSE;
-        }
-
-        let mut stats = statsblk::default();
-        let mut orbits = vec![0_i32; n];
+        options.userautomproc = Some(*userautomproc.code_ptr());
 
         // Safety: Call to nauty library function that computes
         // the automorphism group generator through useratomproc.
-        unsafe {
-            densenauty(
-                nauty_graph.adjacency_matrix.as_mut_ptr(),
-                nauty_graph.vertex_order.as_mut_ptr(),
-                nauty_graph.partition.as_mut_ptr(),
-                orbits.as_mut_ptr(),
-                &mut options,
-                &mut stats,
-                m as c_int,
-                n as c_int,
-                std::ptr::null_mut(),
-            );
+        match nauty_graph {
+            Either::Left(mut dense_nauty_graph) => unsafe {
+                densenauty(
+                    dense_nauty_graph.adjacency_matrix.as_mut_ptr(),
+                    dense_nauty_graph.vertex_order.as_mut_ptr(),
+                    dense_nauty_graph.partition.as_mut_ptr(),
+                    orbits.as_mut_ptr(),
+                    &mut options,
+                    &mut stats,
+                    m as c_int,
+                    n as c_int,
+                    std::ptr::null_mut(),
+                );
+            },
+            Either::Right(mut sparse_nauty_graph) => unsafe {
+                sparsenauty(
+                    &mut (&mut sparse_nauty_graph.sparse_graph).into(),
+                    sparse_nauty_graph.vertex_order.as_mut_ptr(),
+                    sparse_nauty_graph.partition.as_mut_ptr(),
+                    orbits.as_mut_ptr(),
+                    &mut options,
+                    &mut stats,
+                    std::ptr::null_mut(),
+                );
+            },
         }
     }
 
@@ -108,8 +136,8 @@ pub fn compute_generators_with_traces(
         let mut stats = TracesStats::default();
         let mut orbits = vec![0_i32; n];
 
-        // Safety: Call to nauty library function that computes
-        // the automorphism group generator through useratomproc.
+        // Safety: Call to Traces library function that computes
+        // the automorphism group generators through useratomproc.
         unsafe {
             Traces(
                 &mut (&mut traces_graph.sparse_graph).into(),
@@ -312,7 +340,7 @@ mod test {
     }
 
     #[test]
-    fn test_compute_generators_with_nauty() -> Result<(), GraphError> {
+    fn test_compute_generators_with_dense_nauty() -> Result<(), GraphError> {
         let settings = Settings {
             colored_graph: true,
             ..Default::default()
@@ -336,43 +364,23 @@ mod test {
         let colours = [2, 2, 1, 2, 2, 2, 2, 2];
         graph.set_colours(&colours)?;
         graph.order(&order)?;
+
+        // Test dense nauty
         let nauty_graph = graph.prepare_nauty();
         assert!(nauty_graph.check_valid());
-
         let expected_generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
-        let generators = compute_generators_with_nauty(nauty_graph, &settings);
+        let generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
         assert_eq!(expected_generators, generators);
 
-        Ok(())
-    }
+        // Test sparse nauty
+        let sparse_nauty_graph = graph.prepare_sparse_nauty();
+        let expected_generators = vec![vec![0, 3, 2, 1, 4, 7, 6, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
+        let generators =
+            compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
+        assert_eq!(expected_generators, generators);
 
-    #[test]
-    fn test_compute_generators_with_traces() -> Result<(), GraphError> {
-        let settings = Settings {
-            colored_graph: true,
-            ..Default::default()
-        };
-
-        let mut graph = Graph::new_ordered(8);
-        graph.add_edge(0, 1)?;
-        graph.add_edge(0, 3)?;
-        graph.add_edge(0, 4)?;
-        graph.add_edge(1, 2)?;
-        graph.add_edge(1, 5)?;
-        graph.add_edge(2, 3)?;
-        graph.add_edge(2, 6)?;
-        graph.add_edge(3, 7)?;
-        graph.add_edge(4, 5)?;
-        graph.add_edge(4, 7)?;
-        graph.add_edge(5, 6)?;
-        graph.add_edge(6, 7)?;
-
-        let order = [2, 0, 1, 3, 4, 5, 6, 7];
-        let colours = [2, 2, 1, 2, 2, 2, 2, 2];
-        graph.set_colours(&colours)?;
-        graph.order(&order)?;
+        // Test traces
         let traces_graph = graph.prepare_traces();
-
         let expected_generators = vec![vec![7, 3, 2, 6, 4, 0, 1, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
         let generators = compute_generators_with_traces(traces_graph, &settings);
         assert_eq!(expected_generators, generators);

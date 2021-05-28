@@ -192,6 +192,8 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         colored_graph: cl_options.colored_graph,
         nauyt_or_traces: if use_traces {
             NautyTraces::Traces
+        } else if graph.is_sparse() {
+            NautyTraces::SparseNauty
         } else {
             NautyTraces::Nauty
         },

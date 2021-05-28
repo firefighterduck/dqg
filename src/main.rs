@@ -5,7 +5,7 @@
 //! descriptive quotients of graphs
 //! for certain conditions.
 
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use std::time::Instant;
 
 mod graph;
@@ -51,9 +51,11 @@ where
 
 #[derive(Debug)]
 pub enum NautyTraces {
-    /// Called for dense graphs
+    /// Calls dense nauty
     Nauty,
-    /// Called for sparse graphs
+    /// Calls sparse nauty
+    SparseNauty,
+    /// Calls Traces (only for sparse graphs)
     Traces,
 }
 
@@ -186,7 +188,12 @@ fn main() -> Result<(), Error> {
             let nauty_graph = graph.prepare_nauty();
 
             assert!(nauty_graph.check_valid());
-            generators = compute_generators_with_nauty(nauty_graph, &settings);
+            generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
+        }
+        NautyTraces::SparseNauty => {
+            let sparse_nauty_graph = graph.prepare_sparse_nauty();
+            generators =
+                compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
         }
         NautyTraces::Traces => {
             let traces_graph = graph.prepare_traces();

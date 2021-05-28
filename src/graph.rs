@@ -43,6 +43,7 @@ enum GraphState {
 pub struct Graph {
     vertices: Vec<Vertex>,
     size: usize,
+    edge_number: usize,
     #[debug(skip)]
     state: GraphState,
 }
@@ -75,9 +76,18 @@ pub struct TracesGraph {
     pub partition: Vec<VertexIndex>,
 }
 
+pub type SparseNautyGraph = TracesGraph;
+
 impl Graph {
     pub fn size(&self) -> usize {
         self.size
+    }
+
+    pub fn is_sparse(&self) -> bool {
+        // A complete graph has n(n-1)/2 edges for n vertices.
+        // We draw the line between sparse and dense at half
+        // of the possible edges in a complete graph.
+        self.edge_number < self.size * (self.size - 1) / 4
     }
 
     pub fn new_ordered(n: usize) -> Self {
@@ -88,6 +98,7 @@ impl Graph {
         Graph {
             vertices,
             size: n,
+            edge_number: 0,
             state: GraphState::IndexOrdered,
         }
     }
@@ -100,6 +111,7 @@ impl Graph {
         Graph {
             vertices,
             size: indices.len(),
+            edge_number: 0,
             state: GraphState::Chaos,
         }
     }
@@ -153,12 +165,16 @@ impl Graph {
 
     pub fn add_arc(&mut self, start: VertexIndex, end: VertexIndex) -> Result<(), GraphError> {
         self.get_vertex_mut(start)?.add_edge(end);
+        self.edge_number += 1;
         Ok(())
     }
 
     pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) -> Result<(), GraphError> {
         self.add_arc(start, end)?;
-        self.add_arc(end, start)
+        self.edge_number += 1;
+        self.add_arc(end, start)?;
+        self.edge_number += 1;
+        Ok(())
     }
 
     pub fn iterate_edges(&self) -> impl Iterator<Item = (VertexIndex, VertexIndex)> + '_ {
@@ -256,8 +272,8 @@ impl Graph {
     }
 
     pub fn prepare_traces(&mut self) -> TracesGraph {
-        let number_vertices = self.vertices.len();
-        let number_edges = self.iterate_edges().count();
+        let number_vertices = self.size;
+        let number_edges = self.edge_number;
 
         let mut traces_graph = TracesGraph {
             sparse_graph: SparseGraph::new(number_vertices, number_edges),
@@ -296,6 +312,10 @@ impl Graph {
         }
 
         traces_graph
+    }
+
+    pub fn prepare_sparse_nauty(&mut self) -> SparseNautyGraph {
+        self.prepare_traces()
     }
 }
 
@@ -338,6 +358,7 @@ mod test {
     #[test]
     fn new_graph_default() {
         let graph = Graph::new_ordered(120);
+        assert!(graph.is_sparse());
         for (index, vertex) in graph.vertices.iter().enumerate() {
             assert_eq!(index as VertexIndex, vertex.index);
             assert_eq!(DEFAULT_COLOR, vertex.colour);
