@@ -2,7 +2,7 @@ use custom_debug_derive::Debug;
 
 use super::{Colour, GraphError, VertexIndex, DEFAULT_COLOR};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum GraphState {
     IndexOrdered,
     ColourGrouped,
@@ -12,7 +12,7 @@ pub enum GraphState {
 }
 
 /// Fixed size graph.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Graph {
     pub vertices: Vec<Vertex>,
     size: usize,
@@ -129,6 +129,12 @@ impl Graph {
         self.add_arc(end, start)?;
         self.edge_number += 1;
         Ok(())
+    }
+
+    pub fn lookup_edge(&self, start: &VertexIndex, end: &VertexIndex) -> bool {
+        let start = *start as usize;
+        assert!(start < self.size);
+        self.vertices[start].edges_to.iter().any(|edge| edge == end)
     }
 
     pub fn iterate_edges(&self) -> impl Iterator<Item = (VertexIndex, VertexIndex)> + '_ {

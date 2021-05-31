@@ -20,7 +20,7 @@ use quotient::{
 };
 
 mod encoding;
-use encoding::{encode_problem, EdgeCache, HighLevelEncoding};
+use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
 use sat_solving::solve;
@@ -35,7 +35,6 @@ pub use debug::Error;
 use debug::{print_formula, print_orbits_nauty_style};
 
 use crate::{
-    encoding::cache_graph_edges,
     graph::NautyGraph,
     quotient::{empty_orbits, Orbits},
 };
@@ -87,7 +86,6 @@ pub struct Settings {
 fn compute_quotient_with_statistics(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
-    edge_cache: &EdgeCache,
     settings: &Settings,
     statistics: &mut Statistics,
 ) {
@@ -118,7 +116,7 @@ fn compute_quotient_with_statistics(
     time!(
         encoding_time,
         formula,
-        encode_problem(&quotient_graph, edge_cache)
+        encode_problem(&quotient_graph, graph)
     );
 
     if let Some(formula) = formula {
@@ -152,14 +150,13 @@ fn compute_quotient_with_statistics(
 fn compute_quotient(
     generators_subset: &mut [Vec<VertexIndex>],
     graph: &Graph,
-    edge_cache: &EdgeCache,
     settings: &Settings,
 ) {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
 
-    let formula = encode_problem(&quotient_graph, edge_cache);
+    let formula = encode_problem(&quotient_graph, graph);
 
     if let Some(formula) = formula {
         if settings.print_formula {
@@ -221,11 +218,12 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let mut edge_cache = EdgeCache::new(graph.size());
-    cache_graph_edges(&graph, &mut edge_cache);
+    // Sort the graph to allow easier lookup for edges.
+    time!(graph_sort_time, _t, graph.sort());
 
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {
+        statistics.log_graph_sorted(graph_sort_time);
         // ... with statistics ...
         if settings.iter_powerset {
             generators
@@ -236,19 +234,12 @@ fn main() -> Result<(), Error> {
                     compute_quotient_with_statistics(
                         &mut subset,
                         &graph,
-                        &edge_cache,
                         &settings,
                         &mut statistics,
                     )
                 });
         } else if !generators.is_empty() {
-            compute_quotient_with_statistics(
-                &mut generators,
-                &graph,
-                &edge_cache,
-                &settings,
-                &mut statistics,
-            );
+            compute_quotient_with_statistics(&mut generators, &graph, &settings, &mut statistics);
         }
 
         statistics.log_end();
@@ -260,11 +251,9 @@ fn main() -> Result<(), Error> {
                 .into_iter()
                 .powerset()
                 .skip(1)
-                .for_each(|mut subset| {
-                    compute_quotient(&mut subset, &graph, &edge_cache, &settings)
-                });
+                .for_each(|mut subset| compute_quotient(&mut subset, &graph, &settings));
         } else if !generators.is_empty() {
-            compute_quotient(&mut generators, &graph, &edge_cache, &settings);
+            compute_quotient(&mut generators, &graph, &settings);
         }
     }
 

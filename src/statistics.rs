@@ -96,6 +96,8 @@ pub struct Statistics {
     nauty_done_time: Option<Duration>,
     #[debug(with = "opt_fmt")]
     end_time: Option<Duration>,
+    #[debug(with = "opt_fmt")]
+    graph_sort_time: Option<Duration>,
     // Graph statistics
     graph_size: usize,
     #[debug(with = "opt_fmt")]
@@ -121,6 +123,7 @@ impl Statistics {
             start_time: Instant::now(),
             nauty_done_time: None,
             end_time: None,
+            graph_sort_time: None,
             graph_size,
             number_of_generators: None,
             max_orbit_size: 0,
@@ -135,6 +138,11 @@ impl Statistics {
     #[cfg(not(tarpaulin_include))]
     pub fn log_nauty_done(&mut self) {
         self.nauty_done_time = Some(self.start_time.elapsed());
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_graph_sorted(&mut self, duration: Duration) {
+        self.graph_sort_time = Some(duration);
     }
 
     #[cfg(not(tarpaulin_include))]

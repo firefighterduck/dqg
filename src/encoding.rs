@@ -24,7 +24,7 @@ pub trait HighLevelEncoding {
 }
 
 trait SATEncoding {
-    fn encode_sat(&self, dict: &mut SATEncodingDictionary, edges: &EdgeCache) -> Formula;
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary, original_graph: &Graph) -> Formula;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -80,31 +80,6 @@ impl HighLevelEncoding for QuotientGraph {
 }
 
 #[derive(Debug)]
-pub struct EdgeCache {
-    edges: Vec<bool>,
-}
-
-impl EdgeCache {
-    pub fn new(size: usize) -> Self {
-        let cache_size = SATEncodingDictionary::pairing(size as i128, size as i128) as usize;
-        EdgeCache {
-            edges: vec![false; cache_size],
-        }
-    }
-
-    pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) {
-        let insert_index = SATEncodingDictionary::pairing(start as i128, end as i128) as usize;
-        assert!(insert_index <= self.edges.len());
-        self.edges[insert_index] = true;
-    }
-
-    fn lookup_edge(&self, start: &VertexIndex, end: &VertexIndex) -> Option<&bool> {
-        let lookup_index = SATEncodingDictionary::pairing(*start as i128, *end as i128) as usize;
-        self.edges.get(lookup_index)
-    }
-}
-
-#[derive(Debug)]
 pub struct SATEncodingDictionary {
     literal_counter: Literal,
     #[debug(skip)]
@@ -150,7 +125,7 @@ impl SATEncodingDictionary {
 }
 
 impl SATEncoding for OrbitEncoding {
-    fn encode_sat(&self, dict: &mut SATEncodingDictionary, _edges: &EdgeCache) -> Formula {
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary, _original_graph: &Graph) -> Formula {
         // This is actually the encoding that a valid transversal
         // can only choose one element from the orbit.
 
@@ -191,7 +166,7 @@ impl SATEncoding for OrbitEncoding {
 }
 
 impl SATEncoding for QuotientGraphEncoding {
-    fn encode_sat(&self, dict: &mut SATEncodingDictionary, edges: &EdgeCache) -> Formula {
+    fn encode_sat(&self, dict: &mut SATEncodingDictionary, original_graph: &Graph) -> Formula {
         // This is actually the encoding that edges between two
         // vertices (i.e. two orbits) of a quotient graph is preserved
         // when the transversal chooses two vertices from the orbits.
@@ -231,7 +206,7 @@ impl SATEncoding for QuotientGraphEncoding {
                 'end: for end_orbit_element in end_orbit_elements {
                     // If the edge (v1,v2) for the two picked vertices exists
                     // in the original graph, we do not need to encode it.
-                    if let Some(&true) = edges.lookup_edge(start_orbit_element, end_orbit_element) {
+                    if original_graph.lookup_edge(start_orbit_element, end_orbit_element) {
                         continue 'end;
                     }
 
@@ -258,21 +233,12 @@ impl SATEncoding for QuotientGraphEncoding {
     }
 }
 
-/// Encode the graph edges such that the dictionary
-/// knows these and we can lookup whether an edge
-/// exists and thus whether we need to add a clause to the formula.
-pub fn cache_graph_edges(graph: &Graph, cache: &mut EdgeCache) {
-    graph.iterate_edges().for_each(|(start, end)| {
-        cache.add_edge(start, end);
-    });
-}
-
 /// Encode the decision problem whether a set of generators
 /// induces a descriptive quotient graph into SAT.
 #[allow(clippy::needless_collect)]
 pub fn encode_problem(
     quotient_graph: &QuotientGraph,
-    shared_edge_cache: &EdgeCache,
+    original_graph: &Graph,
 ) -> Option<impl Iterator<Item = Clause>> {
     let mut dict = SATEncodingDictionary::default();
 
@@ -280,11 +246,11 @@ pub fn encode_problem(
 
     let transversal_encoding = orbits
         .iter()
-        .flat_map(|orbit| orbit.encode_sat(&mut dict, shared_edge_cache))
+        .flat_map(|orbit| orbit.encode_sat(&mut dict, original_graph))
         .collect::<Formula>();
 
     let descriptive_constraint_encoding =
-        QuotientGraphEncoding(quotient_edges, orbits).encode_sat(&mut dict, shared_edge_cache);
+        QuotientGraphEncoding(quotient_edges, orbits).encode_sat(&mut dict, original_graph);
 
     if descriptive_constraint_encoding.is_empty() {
         None
@@ -311,10 +277,8 @@ mod test {
         graph.add_arc(2, 1)?;
         let orbits = vec![0, 1, 0];
         let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let mut cache = EdgeCache::new(2);
-        cache_graph_edges(&graph, &mut cache);
 
-        let formula = encode_problem(&quotient_graph, &cache);
+        let formula = encode_problem(&quotient_graph, &graph);
         assert!(formula.is_none());
         Ok(())
     }
@@ -351,10 +315,7 @@ mod test {
             vec![-4, -2],
         ];
 
-        let mut cache = EdgeCache::new(graph.size());
-        cache_graph_edges(&graph, &mut cache);
-
-        let formula = encode_problem(&quotient, &cache);
+        let formula = encode_problem(&quotient, &graph);
         assert!(formula.is_some());
         assert!(formula
             .unwrap()
@@ -372,13 +333,10 @@ mod test {
         graph.add_arc(3, 4)?;
         graph.add_arc(4, 0)?;
 
-        let mut cache = EdgeCache::new(graph.size());
-        cache_graph_edges(&graph, &mut cache);
-
-        assert_eq!(Some(&true), cache.lookup_edge(&0, &1));
-        assert_eq!(Some(&true), cache.lookup_edge(&1, &2));
-        assert_eq!(Some(&true), cache.lookup_edge(&3, &4));
-        assert_eq!(Some(&true), cache.lookup_edge(&4, &0));
+        assert_eq!(true, graph.lookup_edge(&0, &1));
+        assert_eq!(true, graph.lookup_edge(&1, &2));
+        assert_eq!(true, graph.lookup_edge(&3, &4));
+        assert_eq!(true, graph.lookup_edge(&4, &0));
 
         Ok(())
     }
@@ -388,7 +346,7 @@ mod test {
         let orbit_encoding = vec![(0, vec![0, 1]), (2, vec![2, 3])];
         let edge_encoding = vec![EdgeEncoding((0, 2))];
         let mut dict = SATEncodingDictionary::default();
-        let cache = EdgeCache::new(4);
+        let some_graph = Graph::new_ordered(4);
 
         let o0v0 = dict.lookup_pairing(0, 0);
         let o0v1 = dict.lookup_pairing(0, 1);
@@ -401,7 +359,7 @@ mod test {
         let constraint13 = vec![-o0v1, -o2v3];
 
         let formula =
-            QuotientGraphEncoding(edge_encoding, orbit_encoding).encode_sat(&mut dict, &cache);
+            QuotientGraphEncoding(edge_encoding, orbit_encoding).encode_sat(&mut dict, &some_graph);
         assert_eq!(4, formula.len());
         assert!(formula.contains(&constraint02));
         assert!(formula.contains(&constraint03));
@@ -413,7 +371,7 @@ mod test {
     fn test_transversal_encoding() {
         let orbit_encoding = (0, vec![0, 1, 4]);
         let mut dict = SATEncodingDictionary::default();
-        let cache = EdgeCache::new(0);
+        let some_graph = Graph::new_ordered(0);
         let pick0 = dict.lookup_pairing(0, 0);
         let pick1 = dict.lookup_pairing(0, 1);
         let pick4 = dict.lookup_pairing(0, 4);
@@ -428,7 +386,7 @@ mod test {
             vec![-pick1, -pick4],
         ];
 
-        let formula = orbit_encoding.encode_sat(&mut dict, &cache);
+        let formula = orbit_encoding.encode_sat(&mut dict, &some_graph);
         assert_eq!(4, formula.len());
         assert!(formula.contains(&at_least_one));
         for mut_ex in at_most_one {
