@@ -68,13 +68,14 @@ impl HighLevelEncoding for Orbits {
     }
 }
 
-type QuotientGraphEncoding = (Vec<EdgeEncoding>, Vec<OrbitEncoding>);
+#[derive(Debug, Clone)]
+pub struct QuotientGraphEncoding(pub Vec<EdgeEncoding>, pub Vec<OrbitEncoding>);
 
 impl HighLevelEncoding for QuotientGraph {
     type HighLevelRepresentation = QuotientGraphEncoding;
 
     fn encode_high(&self) -> Self::HighLevelRepresentation {
-        (self.quotient_graph.encode_high(), self.orbits.encode_high())
+        QuotientGraphEncoding(self.quotient_graph.encode_high(), self.orbits.encode_high())
     }
 }
 
@@ -85,22 +86,20 @@ pub struct EdgeCache {
 
 impl EdgeCache {
     pub fn new(size: usize) -> Self {
-        let cache_size = SATEncodingDictionary::large_pairing(size as u128, size as u128) as usize;
+        let cache_size = SATEncodingDictionary::pairing(size as i128, size as i128) as usize;
         EdgeCache {
             edges: vec![false; cache_size],
         }
     }
 
     pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) {
-        let insert_index =
-            SATEncodingDictionary::large_pairing(start as u128, end as u128) as usize;
+        let insert_index = SATEncodingDictionary::pairing(start as i128, end as i128) as usize;
         assert!(insert_index <= self.edges.len());
         self.edges[insert_index] = true;
     }
 
     fn lookup_edge(&self, start: &VertexIndex, end: &VertexIndex) -> Option<&bool> {
-        let lookup_index =
-            SATEncodingDictionary::large_pairing(*start as u128, *end as u128) as usize;
+        let lookup_index = SATEncodingDictionary::pairing(*start as i128, *end as i128) as usize;
         self.edges.get(lookup_index)
     }
 }
@@ -109,7 +108,7 @@ impl EdgeCache {
 pub struct SATEncodingDictionary {
     literal_counter: Literal,
     #[debug(skip)]
-    literal_map: HashMap<Literal, Literal>,
+    literal_map: HashMap<u128, Literal>,
 }
 
 impl Default for SATEncodingDictionary {
@@ -124,7 +123,7 @@ impl Default for SATEncodingDictionary {
 impl SATEncodingDictionary {
     /// Compute Cantor pairing and add if not stored in dict.
     fn lookup_pairing(&mut self, first: Literal, second: Literal) -> Literal {
-        let pairing_result = Self::pairing(first, second);
+        let pairing_result = Self::pairing(first as i128, second as i128);
 
         if let Some(literal) = self.literal_map.get(&pairing_result) {
             *literal
@@ -135,12 +134,8 @@ impl SATEncodingDictionary {
         }
     }
 
-    pub const fn pairing(first: Literal, second: Literal) -> Literal {
-        (first + second) * (first + second + 1) / 2 + second
-    }
-
-    pub const fn large_pairing(first: u128, second: u128) -> u128 {
-        (first + second) * (first + second + 1) / 2 + second
+    pub fn pairing(first: i128, second: i128) -> u128 {
+        ((first + second) * (first + second + 1) / 2 + second) as u128
     }
 
     fn get_new_literal(&mut self) -> Literal {
@@ -200,7 +195,7 @@ impl SATEncoding for QuotientGraphEncoding {
         // This is actually the encoding that edges between two
         // vertices (i.e. two orbits) of a quotient graph is preserved
         // when the transversal chooses two vertices from the orbits.
-        let (quotient_edges, orbits) = self;
+        let QuotientGraphEncoding(quotient_edges, orbits) = self;
         let mut formula = Vec::new();
 
         // for all (o1,o2) edges in the quotient graph G\O (i.e. o1, o2 in O)
@@ -281,7 +276,7 @@ pub fn encode_problem(
 ) -> Option<impl Iterator<Item = Clause>> {
     let mut dict = SATEncodingDictionary::default();
 
-    let (quotient_edges, orbits) = quotient_graph.encode_high();
+    let QuotientGraphEncoding(quotient_edges, orbits) = quotient_graph.encode_high();
 
     let transversal_encoding = orbits
         .iter()
@@ -289,7 +284,7 @@ pub fn encode_problem(
         .collect::<Formula>();
 
     let descriptive_constraint_encoding =
-        (quotient_edges, orbits).encode_sat(&mut dict, shared_edge_cache);
+        QuotientGraphEncoding(quotient_edges, orbits).encode_sat(&mut dict, shared_edge_cache);
 
     if descriptive_constraint_encoding.is_empty() {
         None
@@ -405,7 +400,8 @@ mod test {
         let constraint12 = vec![-o0v1, -o2v2];
         let constraint13 = vec![-o0v1, -o2v3];
 
-        let formula = (edge_encoding, orbit_encoding).encode_sat(&mut dict, &cache);
+        let formula =
+            QuotientGraphEncoding(edge_encoding, orbit_encoding).encode_sat(&mut dict, &cache);
         assert_eq!(4, formula.len());
         assert!(formula.contains(&constraint02));
         assert!(formula.contains(&constraint03));

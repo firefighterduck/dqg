@@ -111,7 +111,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
     use nom::{
         bytes::complete::tag,
         character::complete::{multispace1, space0},
-        combinator::complete,
+        combinator::{complete, opt},
         multi::{separated_list0, separated_list1},
         sequence::tuple,
     };
@@ -126,7 +126,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
 
     let (input, _) = tag("f=[")(input)?;
     let (input, colour_list) = colour_list(input)?;
-    let (rest, _) = complete(tuple((tag("] x o"), multispace1)))(input)?;
+    let (rest, _) = complete(tuple((tag("]"), opt(tag(" x o")), opt(multispace1))))(input)?;
 
     for colour in colour_list {
         for vertex in colour {
@@ -265,7 +265,7 @@ f=[0|1, 2] x o
 0:1 2 ;
 2:3;
 3:0.
-f=[0|1, 2] x o
+f=[0|1, 2] 
 
         ";
         let mut expected_graph = Graph::new_ordered(4);
