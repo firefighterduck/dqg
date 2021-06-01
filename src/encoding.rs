@@ -5,7 +5,7 @@
 use custom_debug_derive::Debug;
 use itertools::Itertools;
 use kissat_rs::Literal;
-use std::{collections::HashMap, u128};
+use std::collections::HashMap;
 
 use crate::{
     graph::{Graph, VertexIndex},
@@ -83,7 +83,7 @@ impl HighLevelEncoding for QuotientGraph {
 pub struct SATEncodingDictionary {
     literal_counter: Literal,
     #[debug(skip)]
-    literal_map: HashMap<u128, Literal>,
+    literal_map: HashMap<i64, Literal>,
 }
 
 impl Default for SATEncodingDictionary {
@@ -96,9 +96,9 @@ impl Default for SATEncodingDictionary {
 }
 
 impl SATEncodingDictionary {
-    /// Compute Cantor pairing and add if not stored in dict.
-    fn lookup_pairing(&mut self, first: Literal, second: Literal) -> Literal {
-        let pairing_result = Self::pairing(first as i128, second as i128);
+    /// Lookup the literal to which an orbit/vertex pair is mapped.
+    fn lookup_pairing(&mut self, orbit: Literal, vertex: Literal) -> Literal {
+        let pairing_result = Self::pairing(orbit, vertex);
 
         if let Some(literal) = self.literal_map.get(&pairing_result) {
             *literal
@@ -109,15 +109,16 @@ impl SATEncodingDictionary {
         }
     }
 
-    pub fn pairing(first: i128, second: i128) -> u128 {
-        ((first + second) * (first + second + 1) / 2 + second) as u128
+    fn pairing(orbit: VertexIndex, vertex: VertexIndex) -> i64 {
+        let orbit_part = (orbit as i64) << 32;
+        orbit_part + (vertex as i64)
     }
 
     fn get_new_literal(&mut self) -> Literal {
         let new_literal = self.literal_counter;
 
         // Kissat doesn't allow variables over 2^28-1.
-        assert!(new_literal < MAX_LITERAL);
+        debug_assert!(new_literal < MAX_LITERAL);
 
         self.literal_counter += 1;
         new_literal
@@ -175,30 +176,19 @@ impl SATEncoding for QuotientGraphEncoding {
 
         // for all (o1,o2) edges in the quotient graph G\O (i.e. o1, o2 in O)
         for (start_orbit, end_orbit) in quotient_edges.iter().map(EdgeEncoding::get_edge) {
-            let start_orbit_elements = orbits
-                .iter()
-                .find_map(|(orbit_number, orbit_elements)| {
-                    if orbit_number == start_orbit {
-                        Some(orbit_elements)
-                    } else {
-                        None
-                    }
-                })
-                .expect(
+            let start_orbit_elements = {
+                let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(start_orbit)) .expect(
                     "The edges were computed from the orbits, how can there be no fitting orbit?",
                 );
-            let end_orbit_elements = orbits
-                .iter()
-                .find_map(|(orbit_number, orbit_elements)| {
-                    if orbit_number == end_orbit {
-                        Some(orbit_elements)
-                    } else {
-                        None
-                    }
-                })
-                .expect(
+                &orbits[index].1
+            };
+            let end_orbit_elements =
+                {
+                    let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(end_orbit)) .expect(
                     "The edges were computed from the orbits, how can there be no fitting orbit?",
                 );
+                    &orbits[index].1
+                };
 
             // for all vertices v1 in o1
             for start_orbit_element in start_orbit_elements {

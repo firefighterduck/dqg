@@ -121,7 +121,7 @@ impl TracesGraph {
             .sorted_by(|a, b| a.index.cmp(&b.index))
             .enumerate()
         {
-            assert_eq!(index as i32, vertex.index);
+            debug_assert_eq!(index as i32, vertex.index);
             traces_graph.sparse_graph.d[index] = vertex.edges_to.len().try_into().unwrap();
             traces_graph.sparse_graph.v[index] = edge_counter.try_into().unwrap();
 
@@ -265,7 +265,6 @@ mod test {
         let mut traces_graph = TracesGraph::from_graph(&mut graph);
         assert_eq!(traces_graph.vertex_order, order);
         assert_eq!(traces_graph.partition, [0, 1, 1, 1, 1, 1, 1, 0]);
-        dbg!(&traces_graph);
 
         let mut options = TracesOptions::default();
         options.defaultptn = FALSE;

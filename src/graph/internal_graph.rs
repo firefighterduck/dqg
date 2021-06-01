@@ -2,13 +2,14 @@ use custom_debug_derive::Debug;
 
 use super::{Colour, GraphError, VertexIndex, DEFAULT_COLOR};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(std::fmt::Debug, PartialEq, Eq, Clone)]
 pub enum GraphState {
     IndexOrdered,
     ColourGrouped,
     ColourGroupedOrdered,
     Chaos,
     Fixed,
+    SparseSorted,
 }
 
 /// Fixed size graph.
@@ -57,7 +58,7 @@ impl Graph {
         }
     }
 
-    pub fn new_with_indices(indices: &[VertexIndex]) -> Self {
+    pub fn new_with_indices(indices: &[VertexIndex], is_sorted: bool) -> Self {
         let mut vertices = Vec::with_capacity(indices.len());
         for index in indices {
             vertices.push(Vertex::new(*index, DEFAULT_COLOR));
@@ -66,7 +67,11 @@ impl Graph {
             vertices,
             size: indices.len(),
             edge_number: 0,
-            state: GraphState::Chaos,
+            state: if is_sorted {
+                GraphState::SparseSorted
+            } else {
+                GraphState::Chaos
+            },
         }
     }
 
@@ -95,6 +100,10 @@ impl Graph {
     pub fn get_vertex(&mut self, index: VertexIndex) -> Result<&Vertex, GraphError> {
         match self.state {
             GraphState::IndexOrdered => self.vertices.get(index as usize).ok_or(GraphError(index)),
+            GraphState::SparseSorted => Ok(&self.vertices[self
+                .vertices
+                .binary_search_by(|vertex| vertex.index.cmp(&index))
+                .unwrap()]),
             _ => self
                 .vertices
                 .iter()
@@ -109,6 +118,13 @@ impl Graph {
                 .vertices
                 .get_mut(index as usize)
                 .ok_or(GraphError(index)),
+            GraphState::SparseSorted => {
+                let found_index = self
+                    .vertices
+                    .binary_search_by(|vertex| vertex.index.cmp(&index))
+                    .unwrap();
+                Ok(&mut self.vertices[found_index])
+            }
             _ => self
                 .vertices
                 .iter_mut()
@@ -125,16 +141,14 @@ impl Graph {
 
     pub fn add_edge(&mut self, start: VertexIndex, end: VertexIndex) -> Result<(), GraphError> {
         self.add_arc(start, end)?;
-        self.edge_number += 1;
         self.add_arc(end, start)?;
-        self.edge_number += 1;
         Ok(())
     }
 
     pub fn lookup_edge(&self, start: &VertexIndex, end: &VertexIndex) -> bool {
         let start = *start as usize;
-        assert!(start < self.size);
-        self.vertices[start].edges_to.iter().any(|edge| edge == end)
+        debug_assert!(start < self.size);
+        self.vertices[start].edges_to.binary_search(end).is_ok()
     }
 
     pub fn iterate_edges(&self) -> impl Iterator<Item = (VertexIndex, VertexIndex)> + '_ {
@@ -190,8 +204,15 @@ impl Graph {
     }
 
     pub fn sort(&mut self) {
+        if self.state == GraphState::SparseSorted {
+            return;
+        }
+
         if self.state != GraphState::IndexOrdered {
-            self.vertices.sort_unstable_by(|a, b| a.index.cmp(&b.index));
+            self.vertices.sort_unstable();
+            for vertex in self.vertices.iter_mut() {
+                vertex.edges_to.sort_unstable();
+            }
             self.state = GraphState::IndexOrdered;
         }
     }
@@ -208,6 +229,18 @@ impl Vertex {
 
     pub fn add_edge(&mut self, end: VertexIndex) {
         self.edges_to.push(end);
+    }
+}
+
+impl PartialOrd for Vertex {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.index.cmp(&other.index))
+    }
+}
+
+impl Ord for Vertex {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.index.cmp(&other.index)
     }
 }
 

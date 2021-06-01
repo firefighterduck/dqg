@@ -158,7 +158,7 @@ pub fn compute_generators_with_traces(
 // the the generator connects. Does not change the generator
 // (the &mut is for FFI reasons only, will not write into it).
 fn apply_generator(generator: &mut [VertexIndex], orbits: &mut Orbits) {
-    assert_eq!(generator.len(), orbits.len());
+    debug_assert_eq!(generator.len(), orbits.len());
 
     // Safety: Call to nauty library function that reads from the generator
     // and combines orbits accordingly. There probably is no nicer way to do this.
@@ -221,13 +221,14 @@ impl QuotientGraph {
             .unique()
             .copied()
             .collect::<Vec<VertexIndex>>();
+
         let mut quotient_graph;
 
         // We don't need to search for edges if there can't be any.
         if unique_orbits.len() > 1 {
-            quotient_graph = Graph::new_with_indices(&unique_orbits);
+            quotient_graph = Graph::new_with_indices(&unique_orbits, true);
             // Add edges between the orbits if single vertices in these are
-            // connected by and edge. Doesn't add edges within the same orbit.
+            // connected by an edge. Doesn't add edges within the same orbit.
             graph.iterate_edges().for_each(|(start, end)| {
                 let start_orbit = get_orbit(&orbits, start);
                 let end_orbit = get_orbit(&orbits, end);

@@ -115,7 +115,7 @@ pub struct Statistics {
 impl Statistics {
     #[cfg(not(tarpaulin_include))]
     pub fn new(level: StatisticsLevel, out_file: PathBuf, graph_size: usize) -> Self {
-        assert!(level != StatisticsLevel::None);
+        debug_assert!(level != StatisticsLevel::None);
 
         Statistics {
             level,
