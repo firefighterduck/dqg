@@ -44,6 +44,10 @@ struct CommandLineOptions {
     /// the graphs automorphism group.
     #[structopt(short = "-t", long)]
     use_traces: bool,
+    /// Search for the smallest non-descriptive quotient
+    /// core in the first non-descriptive quotient graph.
+    #[structopt(short = "-q", long)]
+    nondescriptive_core: bool,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -190,6 +194,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         log_orbits: cl_options.log_orbits,
         print_formula: cl_options.print_formula,
         colored_graph: cl_options.colored_graph,
+        nondescriptive_core: cl_options.nondescriptive_core,
         nauyt_or_traces: if use_traces {
             NautyTraces::Traces
         } else if graph.is_sparse() {

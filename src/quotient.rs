@@ -5,11 +5,12 @@ use custom_debug_derive::Debug;
 use itertools::{Either, Itertools};
 use libffi::high::{ClosureMut3, ClosureMut6};
 use nauty_Traces_sys::{
-    densenauty, optionblk, orbjoin, sparsenauty, statsblk, Traces, TracesStats, FALSE,
+    densenauty, optionblk, orbjoin, sparsenauty, statsblk, Traces, TracesStats, FALSE, TRUE,
 };
-use std::{os::raw::c_int, slice::from_raw_parts};
+use std::{os::raw::c_int, slice::from_raw_parts, usize};
 
 use crate::{
+    encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     Settings,
 };
@@ -41,6 +42,8 @@ pub fn compute_generators_with_nauty(
             options = optionblk::default_sparse();
         }
     }
+
+    options.schreier = TRUE;
 
     if settings.colored_graph {
         options.defaultptn = FALSE;
@@ -252,6 +255,48 @@ impl QuotientGraph {
             quotient_graph,
             orbits,
         }
+    }
+
+    #[allow(clippy::needless_collect)]
+    pub fn search_non_descriptive_core(self, graph: &Graph) -> Option<QuotientGraphEncoding> {
+        use crate::encoding::{
+            EdgeEncoding, Formula, HighLevelEncoding, SATEncoding, SATEncodingDictionary,
+        };
+        let QuotientGraphEncoding(quotient_edges, orbits) = self.encode_high();
+
+        orbits.iter().cloned().powerset().find_map(|orbit_subset| {
+            let mut dict = SATEncodingDictionary::default();
+            let edge_subset = quotient_edges
+                .iter()
+                .filter(|edge| {
+                    let (start, end) = edge.get_edge();
+                    orbit_subset.iter().any(|(orbit, _)| orbit == start)
+                        && orbit_subset.iter().any(|(orbit, _)| orbit == end)
+                })
+                .copied()
+                .collect::<Vec<EdgeEncoding>>();
+
+            let transversal_encoding = orbit_subset
+                .iter()
+                .flat_map(|orbit| orbit.encode_sat(&mut dict, graph))
+                .collect::<Formula>();
+
+            let descriptive_constraint_encoding =
+                QuotientGraphEncoding(edge_subset.clone(), orbit_subset.clone())
+                    .encode_sat(&mut dict, graph);
+
+            if !crate::solve(
+                transversal_encoding
+                    .into_iter()
+                    .chain(descriptive_constraint_encoding.into_iter()),
+            )
+            .unwrap()
+            {
+                Some(QuotientGraphEncoding(edge_subset, orbit_subset))
+            } else {
+                None
+            }
+        })
     }
 }
 

@@ -32,7 +32,7 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_orbits_nauty_style};
+use debug::{print_formula, print_generator, print_orbits_nauty_style};
 
 use crate::{
     graph::NautyGraph,
@@ -78,6 +78,9 @@ pub struct Settings {
     /// Graph is colored and colors should be
     /// included in the nauty computation.
     pub colored_graph: bool,
+    /// Search for the smallest non-descriptive quotient
+    /// core in the first non-descriptive quotient graph.
+    pub nondescriptive_core: bool,
     ///  Call nauty or traces.
     pub nauyt_or_traces: NautyTraces,
 }
@@ -220,6 +223,31 @@ fn main() -> Result<(), Error> {
 
     // Sort the graph to allow easier lookup for edges.
     time!(graph_sort_time, _t, graph.sort());
+
+    if settings.nondescriptive_core {
+        let core = generators
+            .into_iter()
+            .powerset()
+            .skip(1)
+            .find_map(|mut subset| {
+                let orbits = generate_orbits(&mut subset);
+                let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+                let formula = encode_problem(&quotient_graph, &graph);
+                if let Some(formula) = formula {
+                    if let Ok(false) = solve(formula) {
+                        subset.iter().for_each(print_generator);
+                        quotient_graph.search_non_descriptive_core(&graph)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        println!("{:?}", core);
+        return Ok(());
+    }
 
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {

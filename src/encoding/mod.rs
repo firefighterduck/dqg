@@ -5,14 +5,13 @@
 use kissat_rs::Literal;
 
 mod encoding_dict;
-use encoding_dict::SATEncodingDictionary;
+pub use encoding_dict::SATEncodingDictionary;
 
 mod high_level;
-use high_level::QuotientGraphEncoding;
-pub use high_level::{HighLevelEncoding, OrbitEncoding};
+pub use high_level::{EdgeEncoding, HighLevelEncoding, OrbitEncoding, QuotientGraphEncoding};
 
 mod low_level;
-use low_level::SATEncoding;
+pub use low_level::SATEncoding;
 
 use crate::{graph::Graph, quotient::QuotientGraph};
 
