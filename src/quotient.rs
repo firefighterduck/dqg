@@ -3,9 +3,10 @@
 
 use custom_debug_derive::Debug;
 use itertools::{Either, Itertools};
-use libffi::high::{ClosureMut3, ClosureMut6};
+use libffi::high::{ClosureMut2, ClosureMut3, ClosureMut6};
 use nauty_Traces_sys::{
-    densenauty, optionblk, orbjoin, sparsenauty, statsblk, Traces, TracesStats, FALSE, TRUE,
+    allgroup, densenauty, groupautomproc, grouplevelproc, groupptr, makecosetreps, optionblk,
+    orbjoin, sparsenauty, statsblk, Traces, TracesStats, FALSE, TRUE,
 };
 use std::{os::raw::c_int, slice::from_raw_parts, usize};
 
@@ -157,6 +158,76 @@ pub fn compute_generators_with_traces(
     generators
 }
 
+pub fn search_group(graph: &Graph, mut nauty_graph: NautyGraph, settings: &Settings) {
+    // First, call nauty to compute the group.
+    let (n, m) = nauty_graph.graph_repr_sizes();
+    let mut options = nauty_Traces_sys::optionstruct {
+        schreier: TRUE,
+        ..Default::default()
+    };
+
+    if settings.colored_graph {
+        options.defaultptn = FALSE;
+    }
+
+    let mut stats = statsblk::default();
+    let mut orbits = vec![0_i32; n];
+
+    // Set custom group generating methods.
+    options.userautomproc = Some(groupautomproc);
+    options.userlevelproc = Some(grouplevelproc);
+
+    unsafe {
+        densenauty(
+            nauty_graph.adjacency_matrix.as_mut_ptr(),
+            nauty_graph.vertex_order.as_mut_ptr(),
+            nauty_graph.partition.as_mut_ptr(),
+            orbits.as_mut_ptr(),
+            &mut options,
+            &mut stats,
+            m as c_int,
+            n as c_int,
+            std::ptr::null_mut(),
+        );
+    }
+
+    // Then search in the group.
+    let mut handle_automorphism = |autom_ptr: *mut c_int, n: c_int| {
+        let mut automorphism = Vec::with_capacity(n as usize);
+        let automorphism_raw = unsafe { from_raw_parts(autom_ptr, n as usize) };
+
+        for vertex in automorphism_raw {
+            automorphism.push(*vertex);
+        }
+
+        let quotient = QuotientGraph::from_automorphism(graph, &mut automorphism);
+        let formula = crate::encoding::encode_problem(&quotient, graph);
+
+        if let Some(formula) = formula {
+            let descriptive = crate::sat_solving::solve(formula);
+
+            if let Ok(true) = descriptive {
+                println!("Descriptive induced by {:?}", automorphism);
+            }
+        } else {
+            println!(
+                "Automorphism {:?} induced trivially descriptive.",
+                automorphism
+            );
+        }
+    };
+    let handle_automorphism = ClosureMut2::new(&mut handle_automorphism);
+
+    unsafe {
+        let group = groupptr(TRUE);
+        if group.is_null() {
+            panic!("The group ptr is null!");
+        }
+        makecosetreps(group);
+        allgroup(group, Some(*handle_automorphism.code_ptr()));
+    }
+}
+
 // Apply a generator to the current orbits and combine those,
 // the the generator connects. Does not change the generator
 // (the &mut is for FFI reasons only, will not write into it).
@@ -216,6 +287,12 @@ pub struct QuotientGraph {
 }
 
 impl QuotientGraph {
+    fn from_automorphism(graph: &Graph, automorphism: &mut [VertexIndex]) -> Self {
+        let mut orbits = empty_orbits(graph.size());
+        apply_generator(automorphism, &mut orbits);
+        Self::from_graph_orbits(graph, orbits)
+    }
+
     /// Generates the quotient graph where each orbit is represented
     /// by the vertex with the smallest index in the orbit.
     pub fn from_graph_orbits(graph: &Graph, orbits: Orbits) -> Self {

@@ -36,7 +36,7 @@ use debug::{print_formula, print_generator, print_orbits_nauty_style};
 
 use crate::{
     graph::NautyGraph,
-    quotient::{empty_orbits, Orbits},
+    quotient::{empty_orbits, search_group, Orbits},
 };
 
 #[cfg(not(tarpaulin_include))]
@@ -81,6 +81,9 @@ pub struct Settings {
     /// Search for the smallest non-descriptive quotient
     /// core in the first non-descriptive quotient graph.
     pub nondescriptive_core: bool,
+    /// Search in the whole automorphism group instead
+    /// of a set of generators.
+    pub search_group: bool,
     ///  Call nauty or traces.
     pub nauyt_or_traces: NautyTraces,
 }
@@ -183,6 +186,14 @@ fn main() -> Result<(), Error> {
     let (mut graph, mut statistics, settings) = read_graph()?;
     let mut generators;
 
+    if settings.search_group {
+        let nauty_graph = NautyGraph::from_graph(&mut graph);
+        assert!(nauty_graph.check_valid());
+
+        search_group(&graph, nauty_graph, &settings);
+        return Ok(());
+    }
+
     // ... compute the generators with nauty or Traces. Then ...
     match settings.nauyt_or_traces {
         NautyTraces::Nauty => {
@@ -244,7 +255,7 @@ fn main() -> Result<(), Error> {
                     None
                 }
             })
-            .unwrap();
+            .expect("Nondescriptive core can only be found for nondescriptive generator subsets!");
         println!("{:?}", core);
         return Ok(());
     }
