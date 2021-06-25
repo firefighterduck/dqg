@@ -41,9 +41,16 @@ impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(pe: nom::Err<ParseError<'a>>) -> Self {
         match pe {
-            nom::Err::Error(verbose) | nom::Err::Failure(verbose) => {
-                Self::ParseError(verbose.errors.into_iter().map(|(_, kind)| kind).collect())
-            }
+            nom::Err::Error(verbose) | nom::Err::Failure(verbose) => Self::ParseError(
+                verbose
+                    .errors
+                    .into_iter()
+                    .map(|(msg, kind)| {
+                        eprintln!("{}", msg);
+                        kind
+                    })
+                    .collect(),
+            ),
             nom::Err::Incomplete(_) => unreachable!(),
         }
     }
@@ -141,7 +148,6 @@ fn get_cycle(generator: &Generator, from: usize) -> Vec<VertexIndex> {
         }
     }
 
-    cycle.sort_unstable();
     cycle
 }
 
@@ -158,6 +164,11 @@ pub fn print_generator(generator: &Generator) {
         {
             cycles.push(get_cycle(generator, index));
         }
+    }
+
+    if cycles.is_empty() {
+        println!("Identity permutation.");
+        return;
     }
 
     for cycle in cycles {

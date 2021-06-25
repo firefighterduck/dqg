@@ -190,7 +190,7 @@ fn main() -> Result<(), Error> {
         let nauty_graph = NautyGraph::from_graph(&mut graph);
         assert!(nauty_graph.check_valid());
 
-        search_group(&graph, nauty_graph, &settings);
+        search_group(&mut graph, nauty_graph, &settings);
         return Ok(());
     }
 

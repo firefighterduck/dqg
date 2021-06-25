@@ -18,7 +18,7 @@ fn encode_colours(partition: &mut [Colour]) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NautyGraph {
     /// actual graph
     #[debug(with = "bin_fmt")]

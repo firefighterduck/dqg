@@ -11,6 +11,7 @@ use nauty_Traces_sys::{
 use std::{os::raw::c_int, slice::from_raw_parts, usize};
 
 use crate::{
+    debug::print_generator,
     encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     Settings,
@@ -158,13 +159,18 @@ pub fn compute_generators_with_traces(
     generators
 }
 
-pub fn search_group(graph: &Graph, mut nauty_graph: NautyGraph, settings: &Settings) {
+#[cfg(not(tarpaulin_include))]
+pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &Settings) {
+    let generators = compute_generators_with_nauty(Either::Left(nauty_graph.clone()), settings);
+
+    for generator in generators {
+        print!("Generator: ");
+        print_generator(&generator);
+    }
+
     // First, call nauty to compute the group.
     let (n, m) = nauty_graph.graph_repr_sizes();
-    let mut options = nauty_Traces_sys::optionstruct {
-        schreier: TRUE,
-        ..Default::default()
-    };
+    let mut options = optionblk::default();
 
     if settings.colored_graph {
         options.defaultptn = FALSE;
@@ -191,6 +197,9 @@ pub fn search_group(graph: &Graph, mut nauty_graph: NautyGraph, settings: &Setti
         );
     }
 
+    // Don't forget to sort. Otherwise, the encoding will be wrong.
+    graph.sort();
+
     // Then search in the group.
     let mut handle_automorphism = |autom_ptr: *mut c_int, n: c_int| {
         let mut automorphism = Vec::with_capacity(n as usize);
@@ -207,13 +216,15 @@ pub fn search_group(graph: &Graph, mut nauty_graph: NautyGraph, settings: &Setti
             let descriptive = crate::sat_solving::solve(formula);
 
             if let Ok(true) = descriptive {
-                println!("Descriptive induced by {:?}", automorphism);
+                print!("Descriptive induced by ");
+                print_generator(&automorphism);
+            } else {
+                print!("Nondescriptive induced by ");
+                print_generator(&automorphism);
             }
         } else {
-            println!(
-                "Automorphism {:?} induced trivially descriptive.",
-                automorphism
-            );
+            print!("Automorphism induced trivially descriptive: ");
+            print_generator(&automorphism);
         }
     };
     let handle_automorphism = ClosureMut2::new(&mut handle_automorphism);
@@ -287,6 +298,7 @@ pub struct QuotientGraph {
 }
 
 impl QuotientGraph {
+    #[cfg(not(tarpaulin_include))]
     fn from_automorphism(graph: &Graph, automorphism: &mut [VertexIndex]) -> Self {
         let mut orbits = empty_orbits(graph.size());
         apply_generator(automorphism, &mut orbits);
@@ -334,6 +346,7 @@ impl QuotientGraph {
         }
     }
 
+    #[cfg(not(tarpaulin_include))]
     #[allow(clippy::needless_collect)]
     pub fn search_non_descriptive_core(self, graph: &Graph) -> Option<QuotientGraphEncoding> {
         use crate::encoding::{
@@ -341,39 +354,43 @@ impl QuotientGraph {
         };
         let QuotientGraphEncoding(quotient_edges, orbits) = self.encode_high();
 
-        orbits.iter().cloned().powerset().find_map(|orbit_subset| {
-            let mut dict = SATEncodingDictionary::default();
-            let edge_subset = quotient_edges
-                .iter()
-                .filter(|edge| {
-                    let (start, end) = edge.get_edge();
-                    orbit_subset.iter().any(|(orbit, _)| orbit == start)
-                        && orbit_subset.iter().any(|(orbit, _)| orbit == end)
-                })
-                .copied()
-                .collect::<Vec<EdgeEncoding>>();
+        orbits
+            .iter()
+            .cloned()
+            .combinations(4) // From observations it seemed that such cores are mostly of size 4.
+            .find_map(|orbit_subset| {
+                let mut dict = SATEncodingDictionary::default();
+                let edge_subset = quotient_edges
+                    .iter()
+                    .filter(|edge| {
+                        let (start, end) = edge.get_edge();
+                        orbit_subset.iter().any(|(orbit, _)| orbit == start)
+                            && orbit_subset.iter().any(|(orbit, _)| orbit == end)
+                    })
+                    .copied()
+                    .collect::<Vec<EdgeEncoding>>();
 
-            let transversal_encoding = orbit_subset
-                .iter()
-                .flat_map(|orbit| orbit.encode_sat(&mut dict, graph))
-                .collect::<Formula>();
+                let transversal_encoding = orbit_subset
+                    .iter()
+                    .flat_map(|orbit| orbit.encode_sat(&mut dict, graph))
+                    .collect::<Formula>();
 
-            let descriptive_constraint_encoding =
-                QuotientGraphEncoding(edge_subset.clone(), orbit_subset.clone())
-                    .encode_sat(&mut dict, graph);
+                let descriptive_constraint_encoding =
+                    QuotientGraphEncoding(edge_subset.clone(), orbit_subset.clone())
+                        .encode_sat(&mut dict, graph);
 
-            if !crate::solve(
-                transversal_encoding
-                    .into_iter()
-                    .chain(descriptive_constraint_encoding.into_iter()),
-            )
-            .unwrap()
-            {
-                Some(QuotientGraphEncoding(edge_subset, orbit_subset))
-            } else {
-                None
-            }
-        })
+                if !crate::solve(
+                    transversal_encoding
+                        .into_iter()
+                        .chain(descriptive_constraint_encoding.into_iter()),
+                )
+                .unwrap()
+                {
+                    Some(QuotientGraphEncoding(edge_subset, orbit_subset))
+                } else {
+                    None
+                }
+            })
     }
 }
 

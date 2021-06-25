@@ -65,12 +65,16 @@ fn parse_vertex_edges(
     input: Input<'_>,
 ) -> ParseResult<'_, (VertexIndex, Vec<VertexIndex>)> {
     use nom::{
-        bytes::complete::tag, character::complete::space1, combinator::verify, error::context,
+        bytes::complete::tag,
+        character::complete::{space0, space1},
+        combinator::verify,
+        error::context,
         multi::separated_list1,
+        sequence::pair,
     };
 
     let (input, index) = context("lines starts with vector index", parse_vertex_index)(input)?;
-    let (input, _) = tag(":")(input)?;
+    let (input, _) = pair(tag(":"), space0)(input)?;
 
     let (rest, edges) = context(
         "List of edges from this vertex",
