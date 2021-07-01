@@ -1,6 +1,6 @@
 //! Parser for graph files in dreadnaut syntax.
 //! E.g., these can be generated from planning
-//! problems by this tool: https://home.in.tum.de/~mansour/cv-and-website/tools/quotientPlan.zip
+//! problems by this tool: <https://home.in.tum.de/~mansour/cv-and-website/tools/quotientPlan.zip>
 
 use crate::{
     graph::{Colour, Graph, VertexIndex, DEFAULT_COLOR},

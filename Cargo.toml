@@ -1,6 +1,6 @@
 [package]
 name = "dqg"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Florian Sextl <sextl@in.tum.de>"]
 edition = "2018"
 
@@ -13,6 +13,7 @@ itertools = "0.10.0"
 nom = "6.1.2"
 thiserror = "1.0.24"
 structopt = "0.3.21"
+num = "0.4.0"
 
 [profile.release]
 debug = true

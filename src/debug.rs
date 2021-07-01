@@ -3,16 +3,16 @@ use itertools::Itertools;
 use kissat_rs::Literal;
 use nom::error::VerboseErrorKind;
 use std::{
-    convert::TryInto,
     fmt,
     io::{self, Write},
 };
 
 use crate::{
     encoding::{Clause, HighLevelEncoding},
-    graph::{GraphError, VertexIndex},
+    graph::GraphError,
     parser::ParseError,
-    quotient::{Generator, Orbits},
+    quotient::Generator,
+    quotient::Orbits,
     statistics::OrbitStatistics,
 };
 
@@ -129,42 +129,8 @@ pub fn print_orbits_nauty_style(orbits: Orbits) {
 }
 
 #[cfg(not(tarpaulin_include))]
-#[allow(clippy::ptr_arg)]
-fn get_cycle(generator: &Generator, from: usize) -> Vec<VertexIndex> {
-    let mut cycle = vec![from.try_into().unwrap()];
-
-    let mut element = *generator
-        .get(from)
-        .expect("This should be in the generator!") as usize;
-
-    loop {
-        if element != from {
-            cycle.push(element.try_into().unwrap());
-            element = *generator
-                .get(element)
-                .expect("This should be in the generator!") as usize;
-        } else {
-            break;
-        }
-    }
-
-    cycle
-}
-
-#[cfg(not(tarpaulin_include))]
-#[allow(clippy::ptr_arg)]
-pub fn print_generator(generator: &Generator) {
-    let mut cycles = Vec::new();
-
-    for (index, permut) in generator.iter().enumerate() {
-        if index != (*permut as usize)
-            && !cycles
-                .iter()
-                .any(|cycle: &Vec<VertexIndex>| cycle.contains(&index.try_into().unwrap()))
-        {
-            cycles.push(get_cycle(generator, index));
-        }
-    }
+pub fn print_generator(mut generator: Generator) {
+    let cycles = generator.get_cycles();
 
     if cycles.is_empty() {
         println!("Identity permutation.");

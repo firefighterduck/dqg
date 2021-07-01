@@ -9,14 +9,15 @@ use itertools::{Either, Itertools};
 use std::time::Instant;
 
 mod graph;
-use graph::{Graph, SparseNautyGraph, TracesGraph, VertexIndex};
+use graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph};
 
 mod input;
 use input::read_graph;
 
 mod quotient;
 use quotient::{
-    compute_generators_with_nauty, compute_generators_with_traces, generate_orbits, QuotientGraph,
+    compute_generators_with_nauty, compute_generators_with_traces, empty_orbits, generate_orbits,
+    search_group, Generator, Orbits, QuotientGraph,
 };
 
 mod encoding;
@@ -34,10 +35,7 @@ mod debug;
 pub use debug::Error;
 use debug::{print_formula, print_generator, print_orbits_nauty_style};
 
-use crate::{
-    graph::NautyGraph,
-    quotient::{empty_orbits, search_group, Orbits},
-};
+mod permutation;
 
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
@@ -90,7 +88,7 @@ pub struct Settings {
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
-    generators_subset: &mut [Vec<VertexIndex>],
+    generators_subset: &mut [Generator],
     graph: &Graph,
     settings: &Settings,
     statistics: &mut Statistics,
@@ -153,11 +151,7 @@ fn compute_quotient_with_statistics(
 }
 
 #[cfg(not(tarpaulin_include))]
-fn compute_quotient(
-    generators_subset: &mut [Vec<VertexIndex>],
-    graph: &Graph,
-    settings: &Settings,
-) {
+fn compute_quotient(generators_subset: &mut [Generator], graph: &Graph, settings: &Settings) {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
@@ -246,7 +240,9 @@ fn main() -> Result<(), Error> {
                 let formula = encode_problem(&quotient_graph, &graph);
                 if let Some(formula) = formula {
                     if let Ok(false) = solve(formula) {
-                        subset.iter().for_each(print_generator);
+                        subset
+                            .iter()
+                            .for_each(|automorphism| print_generator(automorphism.clone()));
                         quotient_graph.search_non_descriptive_core(&graph)
                     } else {
                         None

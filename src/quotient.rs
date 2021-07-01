@@ -14,11 +14,12 @@ use crate::{
     debug::print_generator,
     encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
+    permutation::Permutation,
     Settings,
 };
 
-pub type Generator = Vec<VertexIndex>;
 pub type Orbits = Vec<VertexIndex>;
+pub type Generator = Permutation<VertexIndex>;
 
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
@@ -66,7 +67,7 @@ pub fn compute_generators_with_nauty(
                     generator.push(*vertex);
                 }
 
-                generators.push(generator);
+                generators.push(Permutation::new(generator));
             };
         let userautomproc = ClosureMut6::new(&mut userautomproc);
 
@@ -126,7 +127,7 @@ pub fn compute_generators_with_traces(
                 generator.push(*vertex);
             }
 
-            generators.push(generator);
+            generators.push(Permutation::new(generator));
         };
         let userautomproc = ClosureMut3::new(&mut userautomproc);
 
@@ -165,7 +166,7 @@ pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &S
 
     for generator in generators {
         print!("Generator: ");
-        print_generator(&generator);
+        print_generator(generator);
     }
 
     // First, call nauty to compute the group.
@@ -217,14 +218,14 @@ pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &S
 
             if let Ok(true) = descriptive {
                 print!("Descriptive induced by ");
-                print_generator(&automorphism);
+                print_generator(Permutation::new_with_cycles(automorphism));
             } else {
                 print!("Nondescriptive induced by ");
-                print_generator(&automorphism);
+                print_generator(Permutation::new_with_cycles(automorphism));
             }
         } else {
             print!("Automorphism induced trivially descriptive: ");
-            print_generator(&automorphism);
+            print_generator(Permutation::new_with_cycles(automorphism));
         }
     };
     let handle_automorphism = ClosureMut2::new(&mut handle_automorphism);
@@ -281,7 +282,7 @@ pub fn generate_orbits(generators: &mut [Generator]) -> Orbits {
     let mut orbits = empty_orbits(number_of_vertices);
 
     for generator in generators {
-        apply_generator(generator, &mut orbits);
+        apply_generator(&mut generator.raw, &mut orbits);
     }
 
     orbits
@@ -474,7 +475,10 @@ mod test {
 
     #[test]
     fn test_generate_orbits() {
-        let mut generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
+        let mut generators = vec![
+            vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
+            vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
+        ];
         let orbits = generate_orbits(&mut generators);
         assert_eq!(orbits, vec![0, 1, 2, 1, 4, 0, 1, 0]);
     }
@@ -508,20 +512,29 @@ mod test {
         // Test dense nauty
         let nauty_graph = NautyGraph::from_graph(&mut graph);
         assert!(nauty_graph.check_valid());
-        let expected_generators = vec![vec![5, 1, 2, 6, 4, 0, 3, 7], vec![0, 3, 2, 1, 4, 7, 6, 5]];
+        let expected_generators: Vec<Generator> = vec![
+            vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
+            vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
+        ];
         let generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
         assert_eq!(expected_generators, generators);
 
         // Test sparse nauty
         let sparse_nauty_graph = SparseNautyGraph::from_graph(&mut graph);
-        let expected_generators = vec![vec![0, 3, 2, 1, 4, 7, 6, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
+        let expected_generators: Vec<Generator> = vec![
+            vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
+            vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
+        ];
         let generators =
             compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
         assert_eq!(expected_generators, generators);
 
         // Test traces
         let traces_graph = TracesGraph::from_graph(&mut graph);
-        let expected_generators = vec![vec![7, 3, 2, 6, 4, 0, 1, 5], vec![5, 1, 2, 6, 4, 0, 3, 7]];
+        let expected_generators: Vec<Generator> = vec![
+            vec![7, 3, 2, 6, 4, 0, 1, 5].into(),
+            vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
+        ];
         let generators = compute_generators_with_traces(traces_graph, &settings);
         assert_eq!(expected_generators, generators);
 
