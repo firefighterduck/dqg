@@ -1,7 +1,6 @@
 //! Statistics about different parts of the program.
 
 use custom_debug_derive::Debug;
-use itertools::{Itertools, MinMaxResult};
 use std::{
     collections::HashMap,
     fs::File,
@@ -11,7 +10,7 @@ use std::{
 };
 
 use crate::debug::{opt_fmt, result_fmt};
-use crate::{encoding::OrbitEncoding, graph::VertexIndex, Error};
+use crate::{encoding::OrbitEncoding, Error};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StatisticsLevel {
@@ -65,21 +64,6 @@ pub struct QuotientStatistics {
     pub quotient_gen_time: Duration,
     pub encoding_time: Duration,
     pub orbit_sizes: OrbitStatistics,
-}
-
-impl QuotientStatistics {
-    #[cfg(not(tarpaulin_include))]
-    pub fn log_orbit_sizes(orbits: &[VertexIndex]) -> (usize, usize) {
-        let mut counter = vec![0usize; orbits.len()];
-        orbits
-            .iter()
-            .for_each(|orbit| counter[*orbit as usize] += 1);
-        match counter.iter().filter(|size| **size > 0).minmax() {
-            MinMaxResult::NoElements => (0, 0),
-            MinMaxResult::OneElement(m) => (*m, *m),
-            MinMaxResult::MinMax(min, max) => (*min, *max),
-        }
-    }
 }
 
 #[derive(Debug)]

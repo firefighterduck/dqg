@@ -3,7 +3,7 @@ use itertools::Itertools;
 use kissat_rs::Literal;
 use nom::error::VerboseErrorKind;
 use std::{
-    fmt,
+    fmt::{self, Display},
     io::{self, Write},
 };
 
@@ -16,7 +16,16 @@ use crate::{
     statistics::OrbitStatistics,
 };
 
-// Error type and From<...> implementations
+// Error types and From<...> implementations
+
+#[derive(Debug)]
+pub struct MetricError(pub String);
+
+impl Display for MetricError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -28,6 +37,8 @@ pub enum Error {
     CLIParseError(io::Error),
     #[error("Error while calling Kissat")]
     KissatError(kissat_rs::Error),
+    #[error("Unknown metric used")]
+    MetricError(MetricError),
 }
 
 impl From<GraphError> for Error {
@@ -67,6 +78,12 @@ impl From<io::Error> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(ie: io::Error) -> Self {
         Self::CLIParseError(ie)
+    }
+}
+
+impl From<MetricError> for Error {
+    fn from(me: MetricError) -> Self {
+        Self::MetricError(me)
     }
 }
 

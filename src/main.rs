@@ -6,7 +6,7 @@
 //! for certain conditions.
 
 use itertools::{Either, Itertools};
-use std::time::Instant;
+use std::{str::FromStr, time::Instant};
 
 mod graph;
 use graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph};
@@ -33,9 +33,12 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_generator, print_orbits_nauty_style};
+use debug::{print_formula, print_generator, print_orbits_nauty_style, MetricError};
 
 mod permutation;
+
+mod metric;
+use metric::{BiggestOrbits, LeastOrbits, Metric, Sparsity};
 
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
@@ -63,6 +66,49 @@ impl Default for NautyTraces {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum MetricUsed {
+    LeastOrbits,
+    BiggestOrbits,
+    Sparsity,
+}
+
+impl MetricUsed {
+    pub fn compare_quotients(
+        &self,
+        left: &QuotientGraph,
+        right: &QuotientGraph,
+    ) -> std::cmp::Ordering {
+        match &self {
+            Self::LeastOrbits => LeastOrbits::compare_quotients(left, right),
+            Self::BiggestOrbits => BiggestOrbits::compare_quotients(left, right),
+            Self::Sparsity => Sparsity::compare_quotients(left, right),
+        }
+    }
+}
+
+impl FromStr for MetricUsed {
+    type Err = MetricError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("least_orbits") {
+            Ok(Self::LeastOrbits)
+        } else if s.starts_with("biggest_orbit") {
+            Ok(Self::BiggestOrbits)
+        } else if s.starts_with("sparsity") {
+            Ok(Self::Sparsity)
+        } else {
+            Err(MetricError(s.to_string()))
+        }
+    }
+}
+
+impl Default for MetricUsed {
+    fn default() -> Self {
+        Self::LeastOrbits
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Settings {
     /// Iterate the whole powerset.
@@ -82,6 +128,9 @@ pub struct Settings {
     /// Search in the whole automorphism group instead
     /// of a set of generators.
     pub search_group: bool,
+    /// Use the given metric to find the "best" quotient
+    /// and use it as described by the other flags.
+    pub metric: Option<MetricUsed>,
     ///  Call nauty or traces.
     pub nauyt_or_traces: NautyTraces,
 }
@@ -92,16 +141,10 @@ fn compute_quotient_with_statistics(
     graph: &Graph,
     settings: &Settings,
     statistics: &mut Statistics,
-) {
+) -> Option<QuotientGraph> {
     let start_time = Instant::now();
 
     time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
-    time!(
-        _log_orbit_time,
-        min_max_orbit_size,
-        QuotientStatistics::log_orbit_sizes(&orbits)
-    );
-    let (min_orbit_size, max_orbit_size) = min_max_orbit_size;
 
     let mut orbit_sizes = OrbitStatistics::default();
     if settings.log_orbits {
@@ -118,6 +161,13 @@ fn compute_quotient_with_statistics(
     let quotient_size = quotient_graph.quotient_graph.size();
 
     time!(
+        _log_orbit_time,
+        min_max_orbit_size,
+        quotient_graph.get_orbit_sizes()
+    );
+    let (min_orbit_size, max_orbit_size) = min_max_orbit_size;
+
+    time!(
         encoding_time,
         formula,
         encode_problem(&quotient_graph, graph)
@@ -126,10 +176,15 @@ fn compute_quotient_with_statistics(
     if let Some(formula) = formula {
         if settings.print_formula {
             print_formula(formula);
-            return;
+            return None;
         }
 
         time!(kissat_time, descriptive, solve(formula));
+        let return_val = if let Ok(true) = descriptive {
+            Some(quotient_graph)
+        } else {
+            None
+        };
 
         let quotient_handling_time = start_time.elapsed();
         let quotient_stats = QuotientStatistics {
@@ -145,13 +200,20 @@ fn compute_quotient_with_statistics(
             orbit_sizes,
         };
         statistics.log_quotient_statistic(quotient_stats);
+
+        return_val
     } else {
-        println!("Trivially descriptive");
+        eprintln!("Trivially descriptive");
+        Some(quotient_graph)
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-fn compute_quotient(generators_subset: &mut [Generator], graph: &Graph, settings: &Settings) {
+fn compute_quotient(
+    generators_subset: &mut [Generator],
+    graph: &Graph,
+    settings: &Settings,
+) -> Option<QuotientGraph> {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
@@ -161,16 +223,19 @@ fn compute_quotient(generators_subset: &mut [Generator], graph: &Graph, settings
     if let Some(formula) = formula {
         if settings.print_formula {
             print_formula(formula);
-            return;
+            return None;
         }
 
         let descriptive = solve(formula);
 
         if descriptive.is_ok() && !descriptive.unwrap() {
-            eprintln!("Found a non descriptive quotient!");
+            None
+        } else {
+            Some(quotient_graph)
         }
     } else {
-        println!("Trivially descriptive");
+        eprintln!("Trivially descriptive");
+        Some(quotient_graph)
     }
 }
 
@@ -212,12 +277,27 @@ fn main() -> Result<(), Error> {
         st.log_number_of_generators(generators.len())
     });
 
+    // Sort the graph to allow easier lookup for edges.
+    time!(graph_sort_time, _t, graph.sort());
+
+    // Apply a heuristic and find the "best" quotient according
+    // to the chosen metric and print out the orbits for other
+    // tools to directly use them.
     if settings.orbits_only {
-        // TODO apply heuristic beforehand
         let orbits: Orbits;
 
         if generators.is_empty() {
             orbits = empty_orbits(graph.size());
+        } else if let Some(metric) = settings.metric {
+            // Heuristic: full search in set of quotients induced by generators
+            orbits = generators
+                .into_iter()
+                .powerset()
+                .skip(1)
+                .filter_map(|mut subset| compute_quotient(&mut subset, &graph, &settings))
+                .sorted_unstable_by(|left, right| metric.compare_quotients(left, right))
+                .next()
+                .map_or(empty_orbits(graph.size()), |quotient| quotient.orbits);
         } else {
             orbits = generate_orbits(&mut generators);
         }
@@ -226,9 +306,7 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    // Sort the graph to allow easier lookup for edges.
-    time!(graph_sort_time, _t, graph.sort());
-
+    // Search for a non descriptive core in a single non-descriptive quotient.
     if settings.nondescriptive_core {
         let core = generators
             .into_iter()
@@ -266,12 +344,12 @@ fn main() -> Result<(), Error> {
                 .powerset()
                 .skip(1)
                 .for_each(|mut subset| {
-                    compute_quotient_with_statistics(
+                    let _ = compute_quotient_with_statistics(
                         &mut subset,
                         &graph,
                         &settings,
                         &mut statistics,
-                    )
+                    );
                 });
         } else if !generators.is_empty() {
             compute_quotient_with_statistics(&mut generators, &graph, &settings, &mut statistics);
@@ -286,7 +364,9 @@ fn main() -> Result<(), Error> {
                 .into_iter()
                 .powerset()
                 .skip(1)
-                .for_each(|mut subset| compute_quotient(&mut subset, &graph, &settings));
+                .for_each(|mut subset| {
+                    let _ = compute_quotient(&mut subset, &graph, &settings);
+                });
         } else if !generators.is_empty() {
             compute_quotient(&mut generators, &graph, &settings);
         }

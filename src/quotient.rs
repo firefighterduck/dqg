@@ -2,7 +2,7 @@
 //! a set of generators and manage the orbits.
 
 use custom_debug_derive::Debug;
-use itertools::{Either, Itertools};
+use itertools::{Either, Itertools, MinMaxResult};
 use libffi::high::{ClosureMut2, ClosureMut3, ClosureMut6};
 use nauty_Traces_sys::{
     allgroup, densenauty, groupautomproc, grouplevelproc, groupptr, makecosetreps, optionblk,
@@ -344,6 +344,18 @@ impl QuotientGraph {
         QuotientGraph {
             quotient_graph,
             orbits,
+        }
+    }
+
+    pub fn get_orbit_sizes(&self) -> (usize, usize) {
+        let mut counter = vec![0usize; self.orbits.len()];
+        self.orbits
+            .iter()
+            .for_each(|orbit| counter[*orbit as usize] += 1);
+        match counter.iter().filter(|size| **size > 0).minmax() {
+            MinMaxResult::NoElements => (0, 0),
+            MinMaxResult::OneElement(m) => (*m, *m),
+            MinMaxResult::MinMax(min, max) => (*min, *max),
         }
     }
 

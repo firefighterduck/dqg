@@ -14,7 +14,7 @@ use crate::{
     graph::{Graph, VertexIndex},
     parser::parse_dreadnaut_input,
     statistics::{Statistics, StatisticsLevel},
-    Error, NautyTraces, Settings,
+    Error, MetricUsed, NautyTraces, Settings,
 };
 
 #[derive(StructOpt, Debug)]
@@ -52,6 +52,11 @@ struct CommandLineOptions {
     /// of a set of generators.
     #[structopt(short = "-g", long)]
     search_group: bool,
+    /// Use the given metric to find the "best" quotient
+    /// and use it as described by the other flags.
+    /// Possible value: least_orbits, biggest_orbit, sparsity
+    #[structopt(long)]
+    metric: Option<MetricUsed>,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -200,6 +205,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         colored_graph: cl_options.colored_graph,
         nondescriptive_core: cl_options.nondescriptive_core,
         search_group: cl_options.search_group,
+        metric: cl_options.metric,
         nauyt_or_traces: if use_traces {
             NautyTraces::Traces
         } else if graph.is_sparse() {
