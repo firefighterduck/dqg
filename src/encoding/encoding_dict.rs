@@ -42,6 +42,12 @@ impl SATEncodingDictionary {
         orbit_part + (vertex as i64)
     }
 
+    fn unpair(pairing: i64) -> (VertexIndex, VertexIndex) {
+        let orbit = pairing >> 32;
+        let vertex = pairing as i32;
+        (orbit as i32, vertex)
+    }
+
     fn get_new_literal(&mut self) -> Literal {
         let new_literal = self.literal_counter;
 
@@ -50,5 +56,33 @@ impl SATEncodingDictionary {
 
         self.literal_counter += 1;
         new_literal
+    }
+
+    pub fn destroy(mut self) -> Vec<(VertexIndex, VertexIndex)> {
+        let mut pairs = vec![(-1, -1); self.literal_counter as usize];
+        for (pairing, literal) in self.literal_map.drain() {
+            pairs[literal as usize] = Self::unpair(pairing);
+        }
+        pairs
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_pair() {
+        let orbit = 0x12345678;
+        let vertex = 0x07654321;
+        let pair = SATEncodingDictionary::pairing(orbit, vertex);
+        assert_eq!(0x1234567807654321, pair);
+    }
+
+    #[test]
+    fn test_unpair() {
+        let (orbit, vertex) = SATEncodingDictionary::unpair(0x1234567801234567);
+        assert_eq!(0x12345678, orbit);
+        assert_eq!(0x01234567, vertex);
     }
 }

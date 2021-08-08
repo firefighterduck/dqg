@@ -52,6 +52,11 @@ struct CommandLineOptions {
     /// of a set of generators.
     #[structopt(short = "-g", long)]
     search_group: bool,
+    /// Validate each descriptiveness result
+    /// with exhaustive search for consistent
+    /// transversals.
+    #[structopt(short = "-v", long)]
+    validate: bool,
     /// Use the given metric to find the "best" quotient
     /// and use it as described by the other flags.
     /// Possible value: least_orbits, biggest_orbit, sparsity
@@ -205,6 +210,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         colored_graph: cl_options.colored_graph,
         nondescriptive_core: cl_options.nondescriptive_core,
         search_group: cl_options.search_group,
+        validate: cl_options.validate,
         metric: cl_options.metric,
         nauyt_or_traces: if use_traces {
             NautyTraces::Traces

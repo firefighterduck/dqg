@@ -22,6 +22,7 @@ use crate::{
 pub struct MetricError(pub String);
 
 impl Display for MetricError {
+    #[cfg(not(tarpaulin_include))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
@@ -82,6 +83,7 @@ impl From<io::Error> for Error {
 }
 
 impl From<MetricError> for Error {
+    #[cfg(not(tarpaulin_include))]
     fn from(me: MetricError) -> Self {
         Self::MetricError(me)
     }

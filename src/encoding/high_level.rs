@@ -13,11 +13,11 @@ pub trait HighLevelEncoding {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct EdgeEncoding(pub (VertexIndex, VertexIndex));
+pub struct EdgeEncoding(pub VertexIndex, pub VertexIndex);
 
 impl EdgeEncoding {
-    pub fn get_edge(&self) -> &(VertexIndex, VertexIndex) {
-        &self.0
+    pub fn get_edge(&self) -> (VertexIndex, VertexIndex) {
+        (self.0, self.1)
     }
 }
 
@@ -25,7 +25,9 @@ impl HighLevelEncoding for Graph {
     type HighLevelRepresentation = Vec<EdgeEncoding>;
 
     fn encode_high(&self) -> Self::HighLevelRepresentation {
-        self.iterate_edges().map(EdgeEncoding).collect()
+        self.iterate_edges()
+            .map(|(start, end)| EdgeEncoding(start, end))
+            .collect()
     }
 }
 

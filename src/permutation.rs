@@ -184,7 +184,7 @@ where
 
         for (index, value) in self.raw.iter().enumerate() {
             if index != value.clone().try_into().unwrap()
-                && !cycles.iter().any(|cycle: &Vec<T>| cycle.contains(&value))
+                && !cycles.iter().any(|cycle: &Vec<T>| cycle.contains(value))
             {
                 cycles.push(self.get_cycle(value.clone()));
             }

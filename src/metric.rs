@@ -9,6 +9,7 @@ pub trait Metric {
 #[derive(Debug)]
 pub struct LeastOrbits;
 impl Metric for LeastOrbits {
+    #[cfg(not(tarpaulin_include))]
     fn compare_quotients(left: &QuotientGraph, right: &QuotientGraph) -> std::cmp::Ordering {
         left.quotient_graph
             .size()
@@ -22,6 +23,7 @@ impl Metric for LeastOrbits {
 #[derive(Debug)]
 pub struct BiggestOrbits;
 impl Metric for BiggestOrbits {
+    #[cfg(not(tarpaulin_include))]
     fn compare_quotients(left: &QuotientGraph, right: &QuotientGraph) -> std::cmp::Ordering {
         let left_biggest = left.get_orbit_sizes().1;
         let right_biggest = right.get_orbit_sizes().1;
@@ -34,6 +36,7 @@ impl Metric for BiggestOrbits {
 #[derive(Debug)]
 pub struct Sparsity;
 impl Metric for Sparsity {
+    #[cfg(not(tarpaulin_include))]
     fn compare_quotients(left: &QuotientGraph, right: &QuotientGraph) -> std::cmp::Ordering {
         let left_sparsity_coefficient =
             left.quotient_graph.number_edges() as f64 / left.quotient_graph.size() as f64;

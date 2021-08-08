@@ -213,7 +213,7 @@ pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &S
         let quotient = QuotientGraph::from_automorphism(graph, &mut automorphism);
         let formula = crate::encoding::encode_problem(&quotient, graph);
 
-        if let Some(formula) = formula {
+        if let Some((formula, _)) = formula {
             let descriptive = crate::sat_solving::solve(formula);
 
             if let Ok(true) = descriptive {
@@ -377,8 +377,8 @@ impl QuotientGraph {
                     .iter()
                     .filter(|edge| {
                         let (start, end) = edge.get_edge();
-                        orbit_subset.iter().any(|(orbit, _)| orbit == start)
-                            && orbit_subset.iter().any(|(orbit, _)| orbit == end)
+                        orbit_subset.iter().any(|(orbit, _)| *orbit == start)
+                            && orbit_subset.iter().any(|(orbit, _)| *orbit == end)
                     })
                     .copied()
                     .collect::<Vec<EdgeEncoding>>();

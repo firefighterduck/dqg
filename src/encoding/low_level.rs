@@ -64,14 +64,14 @@ impl SATEncoding for QuotientGraphEncoding {
         // for all (o1,o2) edges in the quotient graph G\O (i.e. o1, o2 in O)
         for (start_orbit, end_orbit) in quotient_edges.iter().map(EdgeEncoding::get_edge) {
             let start_orbit_elements = {
-                let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(start_orbit)) .expect(
+                let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(&start_orbit)) .expect(
                     "The edges were computed from the orbits, how can there be no fitting orbit?",
                 );
                 &orbits[index].1
             };
             let end_orbit_elements =
                 {
-                    let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(end_orbit)) .expect(
+                    let index = orbits.binary_search_by(|(orbit,_)| orbit.cmp(&end_orbit)) .expect(
                     "The edges were computed from the orbits, how can there be no fitting orbit?",
                 );
                     &orbits[index].1
@@ -88,8 +88,8 @@ impl SATEncoding for QuotientGraphEncoding {
                     }
 
                     let start_orbit_relation =
-                        dict.lookup_pairing(*start_orbit, *start_orbit_element);
-                    let end_orbit_relation = dict.lookup_pairing(*end_orbit, *end_orbit_element);
+                        dict.lookup_pairing(start_orbit, *start_orbit_element);
+                    let end_orbit_relation = dict.lookup_pairing(end_orbit, *end_orbit_element);
 
                     // If there is an edge in the quotient graph,
                     // the transversal needs to pick vertices from

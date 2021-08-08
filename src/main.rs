@@ -40,6 +40,9 @@ mod permutation;
 mod metric;
 use metric::{BiggestOrbits, LeastOrbits, Metric, Sparsity};
 
+mod transversal;
+use transversal::is_transversal_consistent;
+
 #[cfg(not(tarpaulin_include))]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
 where
@@ -74,6 +77,7 @@ pub enum MetricUsed {
 }
 
 impl MetricUsed {
+    #[cfg(not(tarpaulin_include))]
     pub fn compare_quotients(
         &self,
         left: &QuotientGraph,
@@ -90,6 +94,7 @@ impl MetricUsed {
 impl FromStr for MetricUsed {
     type Err = MetricError;
 
+    #[cfg(not(tarpaulin_include))]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with("least_orbits") {
             Ok(Self::LeastOrbits)
@@ -104,6 +109,7 @@ impl FromStr for MetricUsed {
 }
 
 impl Default for MetricUsed {
+    #[cfg(not(tarpaulin_include))]
     fn default() -> Self {
         Self::LeastOrbits
     }
@@ -128,6 +134,10 @@ pub struct Settings {
     /// Search in the whole automorphism group instead
     /// of a set of generators.
     pub search_group: bool,
+    /// Validate each descriptiveness result
+    /// with exhaustive search for consistent
+    /// transversals.
+    pub validate: bool,
     /// Use the given metric to find the "best" quotient
     /// and use it as described by the other flags.
     pub metric: Option<MetricUsed>,
@@ -142,6 +152,8 @@ fn compute_quotient_with_statistics(
     settings: &Settings,
     statistics: &mut Statistics,
 ) -> Option<QuotientGraph> {
+    use crate::sat_solving::solve_validate;
+
     let start_time = Instant::now();
 
     time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
@@ -156,7 +168,7 @@ fn compute_quotient_with_statistics(
     time!(
         quotient_gen_time,
         quotient_graph,
-        QuotientGraph::from_graph_orbits(&graph, orbits)
+        QuotientGraph::from_graph_orbits(graph, orbits)
     );
     let quotient_size = quotient_graph.quotient_graph.size();
 
@@ -173,13 +185,26 @@ fn compute_quotient_with_statistics(
         encode_problem(&quotient_graph, graph)
     );
 
-    if let Some(formula) = formula {
+    if let Some((formula, dict)) = formula {
         if settings.print_formula {
             print_formula(formula);
             return None;
         }
 
-        time!(kissat_time, descriptive, solve(formula));
+        time!(kissat_time, descriptive, {
+            if settings.validate {
+                solve_validate(formula, dict).map(|transversal| {
+                    if let Some(transversal) = transversal {
+                        is_transversal_consistent(&transversal, graph, quotient_graph.encode_high())
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                solve(formula)
+            }
+        });
+
         let return_val = if let Ok(true) = descriptive {
             Some(quotient_graph)
         } else {
@@ -204,6 +229,7 @@ fn compute_quotient_with_statistics(
         return_val
     } else {
         eprintln!("Trivially descriptive");
+
         Some(quotient_graph)
     }
 }
@@ -214,27 +240,44 @@ fn compute_quotient(
     graph: &Graph,
     settings: &Settings,
 ) -> Option<QuotientGraph> {
+    use crate::sat_solving::solve_validate;
+
     let orbits = generate_orbits(generators_subset);
 
-    let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+    let quotient_graph = QuotientGraph::from_graph_orbits(graph, orbits);
 
     let formula = encode_problem(&quotient_graph, graph);
 
-    if let Some(formula) = formula {
+    if let Some((formula, dict)) = formula {
         if settings.print_formula {
             print_formula(formula);
             return None;
         }
 
-        let descriptive = solve(formula);
-
-        if descriptive.is_ok() && !descriptive.unwrap() {
-            None
+        if settings.validate {
+            let transversal_result = solve_validate(formula, dict);
+            if let Some(transversal) = transversal_result.unwrap() {
+                assert!(is_transversal_consistent(
+                    &transversal,
+                    graph,
+                    quotient_graph.encode_high()
+                ));
+                Some(quotient_graph)
+            } else {
+                None
+            }
         } else {
-            Some(quotient_graph)
+            let descriptive = solve(formula);
+
+            if descriptive.is_ok() && !descriptive.unwrap() {
+                None
+            } else {
+                Some(quotient_graph)
+            }
         }
     } else {
         eprintln!("Trivially descriptive");
+
         Some(quotient_graph)
     }
 }
@@ -316,7 +359,7 @@ fn main() -> Result<(), Error> {
                 let orbits = generate_orbits(&mut subset);
                 let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
                 let formula = encode_problem(&quotient_graph, &graph);
-                if let Some(formula) = formula {
+                if let Some((formula, _)) = formula {
                     if let Ok(false) = solve(formula) {
                         subset
                             .iter()

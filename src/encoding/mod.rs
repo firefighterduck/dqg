@@ -24,7 +24,7 @@ pub type Formula = Vec<Clause>;
 pub fn encode_problem(
     quotient_graph: &QuotientGraph,
     original_graph: &Graph,
-) -> Option<impl Iterator<Item = Clause>> {
+) -> Option<(impl Iterator<Item = Clause>, SATEncodingDictionary)> {
     let mut dict = SATEncodingDictionary::default();
 
     let QuotientGraphEncoding(quotient_edges, orbits) = quotient_graph.encode_high();
@@ -40,11 +40,12 @@ pub fn encode_problem(
     if descriptive_constraint_encoding.is_empty() {
         None
     } else {
-        Some(
+        Some((
             transversal_encoding
                 .into_iter()
                 .chain(descriptive_constraint_encoding.into_iter()),
-        )
+            dict,
+        ))
     }
 }
 
@@ -104,6 +105,7 @@ mod test {
         assert!(formula.is_some());
         assert!(formula
             .unwrap()
+            .0
             .zip(expected.into_iter())
             .all(|(fst, snd)| fst == snd));
 
@@ -129,7 +131,7 @@ mod test {
     #[test]
     fn test_descriptive_constraint() {
         let orbit_encoding = vec![(0, vec![0, 1]), (2, vec![2, 3])];
-        let edge_encoding = vec![EdgeEncoding((0, 2))];
+        let edge_encoding = vec![EdgeEncoding(0, 2)];
         let mut dict = SATEncodingDictionary::default();
         let some_graph = Graph::new_ordered(4);
 
@@ -190,10 +192,10 @@ mod test {
         assert_eq!(
             encoded,
             vec![
-                EdgeEncoding((0, 1)),
-                EdgeEncoding((1, 2)),
-                EdgeEncoding((2, 3)),
-                EdgeEncoding((3, 1))
+                EdgeEncoding(0, 1),
+                EdgeEncoding(1, 2),
+                EdgeEncoding(2, 3),
+                EdgeEncoding(3, 1)
             ]
         );
     }
