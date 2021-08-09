@@ -18,7 +18,7 @@ pub fn solve_validate(
 ) -> Result<Option<Vec<(VertexIndex, VertexIndex)>>, Error> {
     let assignment = Solver::solve_formula(formula).map_err(Error::from)?;
     if let Some(assignment) = assignment {
-        let picked = dict
+        let mut picked = dict
             .destroy()
             .into_iter()
             .enumerate()
@@ -30,6 +30,7 @@ pub fn solve_validate(
             })
             .map(|(_, orbit_vertex)| orbit_vertex)
             .collect_vec();
+        picked.sort_unstable_by(|(orbit1, _), (orbit2, _)| orbit1.cmp(orbit2));
 
         Ok(Some(picked))
     } else {

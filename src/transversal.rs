@@ -9,16 +9,14 @@ pub fn is_transversal_consistent(
     quotient: QuotientGraphEncoding,
 ) -> bool {
     for edge in quotient.0.iter() {
-        let start = transversal
-            .iter()
-            .find(|(orbit, _)| *orbit == edge.0)
-            .unwrap()
-            .1;
-        let end = transversal
-            .iter()
-            .find(|(orbit, _)| *orbit == edge.1)
-            .unwrap()
-            .1;
+        let start = transversal[transversal
+            .binary_search_by(|(orbit, _)| orbit.cmp(&edge.0))
+            .expect("Transversal didn't contain orbit!")]
+        .1;
+        let end = transversal[transversal
+            .binary_search_by(|(orbit, _)| orbit.cmp(&edge.1))
+            .expect("Transversal didn't contain orbit!")]
+        .1;
 
         if !graph.lookup_edge(&start, &end) {
             return false;
@@ -81,19 +79,19 @@ mod test {
                 (4, vec![4]),
             ],
         );
-        let transversal2_1 = vec![(0, 0), (2, 2), (4, 4), (1, 1)];
+        let transversal2_1 = vec![(0, 0), (1, 1), (2, 2), (4, 4)];
         assert!(is_transversal_consistent(
             &transversal2_1,
             &graph,
             quotient2.clone()
         ));
-        let transversal2_2 = vec![(0, 5), (2, 2), (4, 4), (1, 6)];
+        let transversal2_2 = vec![(0, 5), (1, 6), (2, 2), (4, 4)];
         assert!(is_transversal_consistent(
             &transversal2_2,
             &graph,
             quotient2.clone()
         ));
-        let transversal2_3 = vec![(0, 0), (2, 2), (4, 4), (1, 6)];
+        let transversal2_3 = vec![(0, 0), (1, 6), (2, 2), (4, 4)];
         assert!(!is_transversal_consistent(
             &transversal2_3,
             &graph,

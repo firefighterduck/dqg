@@ -191,19 +191,31 @@ fn compute_quotient_with_statistics(
             return None;
         }
 
-        time!(kissat_time, descriptive, {
+        time!(kissat_time, descriptive_validated, {
             if settings.validate {
-                solve_validate(formula, dict).map(|transversal| {
-                    if let Some(transversal) = transversal {
-                        is_transversal_consistent(&transversal, graph, quotient_graph.encode_high())
-                    } else {
-                        false
+                let sat_result = solve_validate(formula, dict);
+                match sat_result {
+                    Ok(transversal) => {
+                        if let Some(transversal) = transversal {
+                            (
+                                Ok(true),
+                                Some(is_transversal_consistent(
+                                    &transversal,
+                                    graph,
+                                    quotient_graph.encode_high(),
+                                )),
+                            )
+                        } else {
+                            (Ok(false), None)
+                        }
                     }
-                })
+                    Err(err) => (Err(err), None),
+                }
             } else {
-                solve(formula)
+                (solve(formula), None)
             }
         });
+        let (descriptive, validated) = descriptive_validated;
 
         let return_val = if let Ok(true) = descriptive {
             Some(quotient_graph)
@@ -217,6 +229,7 @@ fn compute_quotient_with_statistics(
             max_orbit_size,
             min_orbit_size,
             descriptive,
+            validated,
             quotient_handling_time,
             kissat_time,
             orbit_gen_time,

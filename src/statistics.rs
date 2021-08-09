@@ -58,6 +58,8 @@ pub struct QuotientStatistics {
     pub min_orbit_size: usize,
     #[debug(with = "result_fmt")]
     pub descriptive: Result<bool, Error>,
+    #[debug(with = "opt_fmt")]
+    pub validated: Option<bool>,
     pub quotient_handling_time: Duration,
     pub kissat_time: Duration,
     pub orbit_gen_time: Duration,
