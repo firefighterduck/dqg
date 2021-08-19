@@ -14,7 +14,6 @@ impl Metric for LeastOrbits {
         left.quotient_graph
             .size()
             .cmp(&right.quotient_graph.size())
-            .reverse()
     }
 }
 
@@ -27,7 +26,7 @@ impl Metric for BiggestOrbits {
     fn compare_quotients(left: &QuotientGraph, right: &QuotientGraph) -> std::cmp::Ordering {
         let left_biggest = left.get_orbit_sizes().1;
         let right_biggest = right.get_orbit_sizes().1;
-        left_biggest.cmp(&right_biggest)
+        left_biggest.cmp(&right_biggest).reverse()
     }
 }
 
