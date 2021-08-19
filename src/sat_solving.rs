@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
 use kissat_rs::{Assignment, Solver};
 use num::ToPrimitive;
@@ -12,30 +14,32 @@ pub fn solve(formula: impl Iterator<Item = Clause>) -> Result<bool, Error> {
     Solver::decide_formula(formula).map_err(Error::from)
 }
 
+fn get_transversal(
+    assignment: HashMap<i32, Option<Assignment>>,
+    dict: SATEncodingDictionary,
+) -> Vec<(VertexIndex, VertexIndex)> {
+    let mut picked = dict
+        .destroy()
+        .into_iter()
+        .enumerate()
+        .filter(|(literal, _)| {
+            matches!(
+                assignment.get(&(literal.to_i32().unwrap())),
+                Some(Some(Assignment::True))
+            )
+        })
+        .map(|(_, orbit_vertex)| orbit_vertex)
+        .collect_vec();
+    picked.sort_unstable_by(|(orbit1, _), (orbit2, _)| orbit1.cmp(orbit2));
+    picked
+}
+
 pub fn solve_validate(
     formula: impl Iterator<Item = Clause>,
     dict: SATEncodingDictionary,
 ) -> Result<Option<Vec<(VertexIndex, VertexIndex)>>, Error> {
     let assignment = Solver::solve_formula(formula).map_err(Error::from)?;
-    if let Some(assignment) = assignment {
-        let mut picked = dict
-            .destroy()
-            .into_iter()
-            .enumerate()
-            .filter(|(literal, _)| {
-                matches!(
-                    assignment.get(&(literal.to_i32().unwrap())),
-                    Some(Some(Assignment::True))
-                )
-            })
-            .map(|(_, orbit_vertex)| orbit_vertex)
-            .collect_vec();
-        picked.sort_unstable_by(|(orbit1, _), (orbit2, _)| orbit1.cmp(orbit2));
-
-        Ok(Some(picked))
-    } else {
-        Ok(None)
-    }
+    Ok(assignment.map(|assignment| get_transversal(assignment, dict)))
 }
 
 #[cfg(test)]

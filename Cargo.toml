@@ -1,6 +1,6 @@
 [package]
 name = "dqg"
-version = "0.9.2"
+version = "0.10.0"
 authors = ["Florian Sextl <sextl@in.tum.de>"]
 edition = "2018"
 

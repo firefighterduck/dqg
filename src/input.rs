@@ -62,6 +62,10 @@ struct CommandLineOptions {
     /// Possible value: least_orbits, biggest_orbit, sparsity
     #[structopt(long)]
     metric: Option<MetricUsed>,
+    /// Evaluate a log file as printed by
+    /// the quotientPlanning tool.
+    #[structopt(long, parse(from_os_str))]
+    evaluate: Option<PathBuf>,
     /// Level of detail for statistics.
     /// None if left out, basic if `-s`, full for more than one `-s`.
     #[structopt(short = "-s", parse(from_occurrences = StatisticsLevel::from))]
@@ -140,7 +144,23 @@ with the next vertex or a `.` to end inputting edges.", index, index);
 
 #[cfg(not(tarpaulin_include))]
 pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
+    use std::{fs::File, io::BufReader};
+
     let cl_options = CommandLineOptions::from_args();
+
+    if let Some(eval_path) = cl_options.evaluate {
+        let eval_file = File::open(eval_path)?;
+        let buf = BufReader::new(eval_file);
+        return Ok((
+            Graph::new_ordered(0),
+            None,
+            Settings {
+                evaluate: Some(buf),
+                ..Default::default()
+            },
+        ));
+    }
+
     let mut use_traces = cl_options.use_traces;
     let mut graph;
     let mut out_file;
@@ -212,6 +232,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         search_group: cl_options.search_group,
         validate: cl_options.validate,
         metric: cl_options.metric,
+        evaluate: None,
         nauyt_or_traces: if use_traces {
             NautyTraces::Traces
         } else if graph.is_sparse() {

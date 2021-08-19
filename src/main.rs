@@ -6,7 +6,7 @@
 //! for certain conditions.
 
 use itertools::{Either, Itertools};
-use std::{str::FromStr, time::Instant};
+use std::time::Instant;
 
 mod graph;
 use graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph};
@@ -33,117 +33,20 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_generator, print_orbits_nauty_style, MetricError};
+use debug::{print_formula, print_generator, print_orbits_nauty_style};
 
 mod permutation;
 
 mod metric;
-use metric::{BiggestOrbits, LeastOrbits, Metric, Sparsity};
 
 mod transversal;
 use transversal::is_transversal_consistent;
 
-#[cfg(not(tarpaulin_include))]
-pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
-where
-    F: FnOnce(&mut T),
-{
-    if let Some(val) = optional {
-        f(val);
-    }
-}
+mod misc;
+pub use misc::{do_if_some, MetricUsed, NautyTraces, Settings};
 
-#[derive(Debug)]
-pub enum NautyTraces {
-    /// Calls dense nauty
-    Nauty,
-    /// Calls sparse nauty
-    SparseNauty,
-    /// Calls Traces (only for sparse graphs)
-    Traces,
-}
-
-impl Default for NautyTraces {
-    fn default() -> Self {
-        Self::Nauty
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum MetricUsed {
-    LeastOrbits,
-    BiggestOrbits,
-    Sparsity,
-}
-
-impl MetricUsed {
-    #[cfg(not(tarpaulin_include))]
-    pub fn compare_quotients(
-        &self,
-        left: &QuotientGraph,
-        right: &QuotientGraph,
-    ) -> std::cmp::Ordering {
-        match &self {
-            Self::LeastOrbits => LeastOrbits::compare_quotients(left, right),
-            Self::BiggestOrbits => BiggestOrbits::compare_quotients(left, right),
-            Self::Sparsity => Sparsity::compare_quotients(left, right),
-        }
-    }
-}
-
-impl FromStr for MetricUsed {
-    type Err = MetricError;
-
-    #[cfg(not(tarpaulin_include))]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("least_orbits") {
-            Ok(Self::LeastOrbits)
-        } else if s.starts_with("biggest_orbit") {
-            Ok(Self::BiggestOrbits)
-        } else if s.starts_with("sparsity") {
-            Ok(Self::Sparsity)
-        } else {
-            Err(MetricError(s.to_string()))
-        }
-    }
-}
-
-impl Default for MetricUsed {
-    #[cfg(not(tarpaulin_include))]
-    fn default() -> Self {
-        Self::LeastOrbits
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Settings {
-    /// Iterate the whole powerset.
-    pub iter_powerset: bool,
-    /// Compute only orbits.
-    pub orbits_only: bool,
-    /// Log orbit sizes.
-    pub log_orbits: bool,
-    /// Print formula instead of solving it.
-    pub print_formula: bool,
-    /// Graph is colored and colors should be
-    /// included in the nauty computation.
-    pub colored_graph: bool,
-    /// Search for the smallest non-descriptive quotient
-    /// core in the first non-descriptive quotient graph.
-    pub nondescriptive_core: bool,
-    /// Search in the whole automorphism group instead
-    /// of a set of generators.
-    pub search_group: bool,
-    /// Validate each descriptiveness result
-    /// with exhaustive search for consistent
-    /// transversals.
-    pub validate: bool,
-    /// Use the given metric to find the "best" quotient
-    /// and use it as described by the other flags.
-    pub metric: Option<MetricUsed>,
-    ///  Call nauty or traces.
-    pub nauyt_or_traces: NautyTraces,
-}
+mod evaluate;
+use evaluate::evaluate_log_file;
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
@@ -297,8 +200,17 @@ fn compute_quotient(
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
+    use std::io::BufRead;
+
     // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
+
+    if let Some(eval_buf) = settings.evaluate {
+        let logs = evaluate_log_file(&mut eval_buf.lines());
+        println!("{:#?}", logs);
+        return Ok(());
+    }
+
     let mut generators;
 
     if settings.search_group {
