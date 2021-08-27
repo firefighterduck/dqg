@@ -11,9 +11,7 @@ pub struct LeastOrbits;
 impl Metric for LeastOrbits {
     #[cfg(not(tarpaulin_include))]
     fn compare_quotients(left: &QuotientGraph, right: &QuotientGraph) -> std::cmp::Ordering {
-        left.quotient_graph
-            .size()
-            .cmp(&right.quotient_graph.size())
+        left.quotient_graph.size().cmp(&right.quotient_graph.size())
     }
 }
 

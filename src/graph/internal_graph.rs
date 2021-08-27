@@ -96,8 +96,7 @@ impl Graph {
         Ok(())
     }
 
-    #[cfg(test)]
-    pub fn get_vertex(&mut self, index: VertexIndex) -> Result<&Vertex, GraphError> {
+    pub fn get_vertex(&self, index: VertexIndex) -> Result<&Vertex, GraphError> {
         match self.state {
             GraphState::IndexOrdered => self.vertices.get(index as usize).ok_or(GraphError(index)),
             GraphState::SparseSorted => Ok(&self.vertices[self

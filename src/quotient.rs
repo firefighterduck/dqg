@@ -360,18 +360,19 @@ impl QuotientGraph {
     }
 
     #[cfg(not(tarpaulin_include))]
-    #[allow(clippy::needless_collect)]
     pub fn search_non_descriptive_core(self, graph: &Graph) -> Option<QuotientGraphEncoding> {
         use crate::encoding::{
-            EdgeEncoding, Formula, HighLevelEncoding, SATEncoding, SATEncodingDictionary,
+            EdgeEncoding, HighLevelEncoding, SATEncoding, SATEncodingDictionary,
         };
+        use rayon::prelude::*;
         let QuotientGraphEncoding(quotient_edges, orbits) = self.encode_high();
 
         orbits
             .iter()
             .cloned()
             .combinations(4) // From observations it seemed that such cores are mostly of size 4.
-            .find_map(|orbit_subset| {
+            .par_bridge()
+            .find_map_any(|orbit_subset| {
                 let mut dict = SATEncodingDictionary::default();
                 let edge_subset = quotient_edges
                     .iter()
@@ -383,19 +384,16 @@ impl QuotientGraph {
                     .copied()
                     .collect::<Vec<EdgeEncoding>>();
 
-                let transversal_encoding = orbit_subset
-                    .iter()
-                    .flat_map(|orbit| orbit.encode_sat(&mut dict, graph))
-                    .collect::<Formula>();
-
                 let descriptive_constraint_encoding =
                     QuotientGraphEncoding(edge_subset.clone(), orbit_subset.clone())
                         .encode_sat(&mut dict, graph);
 
+                let transversal_encoding = orbit_subset
+                    .iter()
+                    .flat_map(|orbit| orbit.encode_sat(&mut dict, graph));
+
                 if !crate::solve(
-                    transversal_encoding
-                        .into_iter()
-                        .chain(descriptive_constraint_encoding.into_iter()),
+                    transversal_encoding.chain(descriptive_constraint_encoding.into_iter()),
                 )
                 .unwrap()
                 {
@@ -430,7 +428,7 @@ mod test {
 
         let orbits = vec![0, 1, 2, 1, 4, 0, 1, 0];
 
-        let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
+        let quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
         assert_eq!(orbits, quotient.orbits);
 
         let mut expected_vert0 = Vertex::new(0, DEFAULT_COLOR);
@@ -466,7 +464,7 @@ mod test {
         let graph = Graph::new_ordered(1);
         let orbits = vec![0];
 
-        let mut quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
+        let quotient = QuotientGraph::from_graph_orbits(&graph, orbits.clone());
         assert_eq!(orbits, quotient.orbits);
         assert_eq!(
             Vertex::new(0, DEFAULT_COLOR),

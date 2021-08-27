@@ -33,7 +33,7 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_generator, print_orbits_nauty_style};
+use debug::{print_formula, print_orbits_nauty_style};
 
 mod permutation;
 
@@ -202,6 +202,8 @@ fn compute_quotient(
 fn main() -> Result<(), Error> {
     use std::io::BufRead;
 
+    use crate::debug::print_dot;
+
     // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
 
@@ -280,15 +282,17 @@ fn main() -> Result<(), Error> {
             .into_iter()
             .powerset()
             .skip(1)
-            .find_map(|mut subset| {
+            .map(|mut subset| {
                 let orbits = generate_orbits(&mut subset);
-                let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+                QuotientGraph::from_graph_orbits(&graph, orbits)
+            })
+            .sorted_unstable_by(|left, right| {
+                MetricUsed::LeastOrbits.compare_quotients(left, right)
+            })
+            .find_map(|quotient_graph| {
                 let formula = encode_problem(&quotient_graph, &graph);
                 if let Some((formula, _)) = formula {
                     if let Ok(false) = solve(formula) {
-                        subset
-                            .iter()
-                            .for_each(|automorphism| print_generator(automorphism.clone()));
                         quotient_graph.search_non_descriptive_core(&graph)
                     } else {
                         None
@@ -298,8 +302,7 @@ fn main() -> Result<(), Error> {
                 }
             })
             .expect("Nondescriptive core can only be found for nondescriptive generator subsets!");
-        println!("{:?}", core);
-        return Ok(());
+        return print_dot(core, &graph);
     }
 
     // ... iterate over the specified subsets of generators...

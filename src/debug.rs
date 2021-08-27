@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    encoding::{Clause, HighLevelEncoding},
-    graph::GraphError,
+    encoding::{Clause, HighLevelEncoding, QuotientGraphEncoding},
+    graph::{Graph, GraphError, VertexIndex},
     parser::ParseError,
     quotient::Generator,
     quotient::Orbits,
@@ -166,6 +166,36 @@ pub fn print_generator(mut generator: Generator) {
         print!(") ");
     }
     println!();
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn print_dot(quotient_encoding: QuotientGraphEncoding, graph: &Graph) -> Result<(), Error> {
+    println!("graph graphname {{");
+
+    let colors = vec!["red", "green", "blue", "black", "yellow", "orange"]; // I don't expect to print more than 4 orbits at a time with one color per orbit.
+
+    let mut vertices_in_core = quotient_encoding
+        .1
+        .iter()
+        .map(|(_, vertices)| vertices)
+        .cloned()
+        .flatten()
+        .collect::<Vec<VertexIndex>>();
+    vertices_in_core.sort_unstable();
+
+    for (orbit, color) in quotient_encoding.1.iter().zip(colors) {
+        for vertex in orbit.1.iter() {
+            println!("{:?} [color={:?}];", vertex, color);
+            for end in graph.get_vertex(*vertex)?.edges_to.iter() {
+                if vertex < end && vertices_in_core.binary_search(end).is_ok() {
+                    println!("{:?} -- {:?};", vertex, end);
+                }
+            }
+        }
+    }
+
+    println!("}}");
+    Ok(())
 }
 
 // Custom formatter for debug printing

@@ -10,10 +10,11 @@ kissat-rs = {git = "https://github.com/firefighterduck/kissat-rs", branch = "mai
 libffi = "1.0.1"
 custom_debug_derive = "0.5.0"
 itertools = "0.10.1"
-nom = "6.1.2"
+nom = "7.0.0"
 thiserror = "1.0.26"
 structopt = "0.3.21"
 num = "0.4.0"
+rayon = "1.5.1"
 
 [profile.release]
 debug = true
