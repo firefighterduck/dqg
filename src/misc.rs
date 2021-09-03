@@ -1,6 +1,4 @@
-use std::fs::File;
-use std::io::BufReader;
-use std::str::FromStr;
+use std::{fs::File, io::BufReader, str::FromStr};
 
 use crate::debug::MetricError;
 use crate::{

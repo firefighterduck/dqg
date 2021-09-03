@@ -1,6 +1,6 @@
 use custom_debug_derive::Debug;
 use itertools::Itertools;
-use nauty_Traces_sys::{empty_graph, SparseGraph, ADDONEARC, SETWORDSNEEDED};
+use nauty_Traces_sys::{empty_graph, SparseGraph, ADDONEEDGE, SETWORDSNEEDED};
 use std::{convert::TryInto, os::raw::c_int};
 
 use super::{Colour, Graph, GraphState, VertexIndex};
@@ -63,7 +63,7 @@ impl NautyGraph {
             nauty_graph.partition.push(vertex.colour);
 
             for end in vertex.edges_to.iter() {
-                ADDONEARC(
+                ADDONEEDGE(
                     &mut nauty_graph.adjacency_matrix,
                     vertex.index as usize,
                     *end as usize,

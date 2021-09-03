@@ -6,7 +6,7 @@
 //! for certain conditions.
 
 use itertools::{Either, Itertools};
-use std::time::Instant;
+use std::{io::BufRead, time::Instant};
 
 mod graph;
 use graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph};
@@ -24,7 +24,7 @@ mod encoding;
 use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
-use sat_solving::solve;
+use sat_solving::{solve, solve_validate};
 
 mod parser;
 
@@ -33,7 +33,7 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_orbits_nauty_style};
+use debug::{print_dot, print_formula, print_orbits_nauty_style};
 
 mod permutation;
 
@@ -55,8 +55,6 @@ fn compute_quotient_with_statistics(
     settings: &Settings,
     statistics: &mut Statistics,
 ) -> Option<QuotientGraph> {
-    use crate::sat_solving::solve_validate;
-
     let start_time = Instant::now();
 
     time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
@@ -156,8 +154,6 @@ fn compute_quotient(
     graph: &Graph,
     settings: &Settings,
 ) -> Option<QuotientGraph> {
-    use crate::sat_solving::solve_validate;
-
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(graph, orbits);
@@ -200,12 +196,14 @@ fn compute_quotient(
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
-    use std::io::BufRead;
-
-    use crate::debug::print_dot;
-
     // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
+
+    println!(
+        "Graph with size {} and {} edges.",
+        graph.size(),
+        graph.number_edges()
+    );
 
     if let Some(eval_buf) = settings.evaluate {
         let logs = evaluate_log_file(&mut eval_buf.lines());

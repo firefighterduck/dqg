@@ -4,15 +4,15 @@
 
 use std::{
     env::current_dir,
-    fs::read_to_string,
-    io::{self, BufRead, Stdin, Write},
+    fs::File,
+    io::{self, BufReader, Stdin, Write},
     path::PathBuf,
 };
 use structopt::StructOpt;
 
 use crate::{
     graph::{Graph, VertexIndex},
-    parser::parse_dreadnaut_input,
+    parser::{parse_csv_input, parse_dreadnaut_input, parse_txt_input},
     statistics::{Statistics, StatisticsLevel},
     Error, MetricUsed, NautyTraces, Settings,
 };
@@ -57,6 +57,10 @@ struct CommandLineOptions {
     /// transversals.
     #[structopt(short = "-v", long)]
     validate: bool,
+    /// GIve graph size for file formats
+    /// which don't contain the graph size.
+    #[structopt(short = "-n", long)]
+    graph_size: Option<usize>,
     /// Use the given metric to find the "best" quotient
     /// and use it as described by the other flags.
     /// Possible value: least_orbits, biggest_orbit, sparsity
@@ -144,8 +148,6 @@ with the next vertex or a `.` to end inputting edges.", index, index);
 
 #[cfg(not(tarpaulin_include))]
 pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
-    use std::{fs::File, io::BufReader};
-
     let cl_options = CommandLineOptions::from_args();
 
     if let Some(eval_path) = cl_options.evaluate {
@@ -168,8 +170,22 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
 
     if let Some(path_to_graph_file) = cl_options.input {
         // Either read the graph from a file ..
-        let file = read_to_string(&path_to_graph_file)?;
-        let (parsed_graph, has_header) = parse_dreadnaut_input(&file)?;
+        let file_buf = BufReader::new(File::open(&path_to_graph_file)?);
+        let (parsed_graph, has_header) = match path_to_graph_file
+            .as_path()
+            .extension()
+            .unwrap()
+            .to_str()
+            .unwrap()
+        {
+            "dre" => parse_dreadnaut_input(file_buf)?,
+            "csv" => (
+                parse_csv_input(cl_options.graph_size.unwrap(), file_buf)?,
+                false,
+            ),
+            "txt" => (parse_txt_input(file_buf)?, false),
+            _ => unimplemented!(),
+        };
         use_traces |= has_header;
         graph = parsed_graph;
 
@@ -181,18 +197,8 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
 
         if cl_options.read_memory_pipe {
             // Stdin can either mean a memory pipe ...
-            let file = stdin
-                .lock()
-                .lines()
-                .map(|mut line| {
-                    line.iter_mut().for_each(|line| line.push('\n'));
-                    line
-                })
-                .fold(String::new(), |mut acc, line| {
-                    line.iter().for_each(|line| acc.push_str(line));
-                    acc
-                });
-            let (parsed_graph, has_header) = parse_dreadnaut_input(&file)?;
+            let file_buf = BufReader::new(stdin.lock());
+            let (parsed_graph, has_header) = parse_dreadnaut_input(file_buf)?;
             use_traces |= has_header;
             graph = parsed_graph;
         } else {

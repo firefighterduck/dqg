@@ -1,9 +1,9 @@
 //! Debug facilities.
 use itertools::Itertools;
 use kissat_rs::Literal;
-use nom::error::VerboseErrorKind;
+use nom::error::{VerboseError, VerboseErrorKind};
 use std::{
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     io::{self, Write},
 };
 
@@ -24,7 +24,7 @@ pub struct MetricError(pub String);
 impl Display for MetricError {
     #[cfg(not(tarpaulin_include))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -49,20 +49,25 @@ impl From<GraphError> for Error {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
+fn handle_nom_verbose_error<E: Debug>(verbose: VerboseError<E>) -> Vec<VerboseErrorKind> {
+    verbose
+        .errors
+        .into_iter()
+        .map(|(msg, kind)| {
+            eprintln!("{:?}", msg);
+            kind
+        })
+        .collect()
+}
+
 impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(pe: nom::Err<ParseError<'a>>) -> Self {
         match pe {
-            nom::Err::Error(verbose) | nom::Err::Failure(verbose) => Self::ParseError(
-                verbose
-                    .errors
-                    .into_iter()
-                    .map(|(msg, kind)| {
-                        eprintln!("{}", msg);
-                        kind
-                    })
-                    .collect(),
-            ),
+            nom::Err::Error(verbose) | nom::Err::Failure(verbose) => {
+                Self::ParseError(handle_nom_verbose_error(verbose))
+            }
             nom::Err::Incomplete(_) => unreachable!(),
         }
     }
@@ -266,5 +271,43 @@ macro_rules! print_time_mut {
         let before = std::time::Instant::now();
         let mut $ret = $exp;
         println!("{} took {:?}", $name, before.elapsed());
+    };
+}
+
+#[macro_export]
+macro_rules! parse_single_line {
+    ($ret:ident, $exp:expr) => {
+        let (res, $ret) = $exp?;
+        eof(res)?;
+    };
+}
+
+#[macro_export]
+macro_rules! get_line {
+    ($ret:ident, $lines:ident) => {
+        let $ret = $lines.next().unwrap_or_else(|| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF!",
+            ))
+        })?;
+    };
+}
+
+#[macro_export]
+macro_rules! get_line_parse {
+    ($lines:ident, $ret:ident, $exp:expr) => {
+        crate::get_line!(line, $lines);
+        let (res, $ret) = $exp(&line)?;
+        eof(res)?;
+    };
+}
+
+#[macro_export]
+macro_rules! get_line_recognize {
+    ($lines:ident, $exp:expr) => {
+        crate::get_line!(line, $lines);
+        let (res, _) = $exp(&line)?;
+        eof(res)?;
     };
 }
