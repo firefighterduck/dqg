@@ -151,11 +151,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
 }
 
 pub fn parse_dreadnaut_input<B: BufRead>(input: B) -> Result<(Graph, bool), Error> {
-    use nom::{
-        combinator::eof,
-        error::{ErrorKind, VerboseError},
-        Err,
-    };
+    use nom::combinator::eof;
 
     let mut lines = input.lines().peekable();
 
@@ -165,9 +161,7 @@ pub fn parse_dreadnaut_input<B: BufRead>(input: B) -> Result<(Graph, bool), Erro
     let mut graph = Graph::new_ordered(graph_size);
 
     loop {
-        let line = lines
-            .next()
-            .ok_or_else(|| Err::Error(VerboseError::from_error_kind("", ErrorKind::Eof)))??;
+        get_line!(line, lines);
         let (res, vertex_edges) = parse_vertex_edges(graph_size, &line)?;
         let (vertex, edges) = vertex_edges;
 

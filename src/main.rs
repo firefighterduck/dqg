@@ -46,7 +46,7 @@ mod misc;
 pub use misc::{do_if_some, MetricUsed, NautyTraces, Settings};
 
 mod evaluate;
-use evaluate::evaluate_log_file;
+use evaluate::{evaluate_log_file, evaluate_logs};
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
@@ -199,15 +199,9 @@ fn main() -> Result<(), Error> {
     // Read the graph from a file or via CLI and ...
     let (mut graph, mut statistics, settings) = read_graph()?;
 
-    println!(
-        "Graph with size {} and {} edges.",
-        graph.size(),
-        graph.number_edges()
-    );
-
     if let Some(eval_buf) = settings.evaluate {
         let logs = evaluate_log_file(&mut eval_buf.lines());
-        println!("{:#?}", logs);
+        evaluate_logs(&logs);
         return Ok(());
     }
 
@@ -270,36 +264,26 @@ fn main() -> Result<(), Error> {
             orbits = generate_orbits(&mut generators);
         }
 
-        print_orbits_nauty_style(orbits);
+        print_orbits_nauty_style(orbits, &statistics);
         return Ok(());
     }
 
     // Search for a non descriptive core in a single non-descriptive quotient.
     if settings.nondescriptive_core {
-        let core = generators
-            .into_iter()
-            .powerset()
-            .skip(1)
-            .map(|mut subset| {
-                let orbits = generate_orbits(&mut subset);
-                QuotientGraph::from_graph_orbits(&graph, orbits)
-            })
-            .sorted_unstable_by(|left, right| {
-                MetricUsed::LeastOrbits.compare_quotients(left, right)
-            })
-            .find_map(|quotient_graph| {
-                let formula = encode_problem(&quotient_graph, &graph);
-                if let Some((formula, _)) = formula {
-                    if let Ok(false) = solve(formula) {
-                        quotient_graph.search_non_descriptive_core(&graph)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .expect("Nondescriptive core can only be found for nondescriptive generator subsets!");
+        let orbits = generate_orbits(&mut generators);
+        let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
+        let formula = encode_problem(&quotient_graph, &graph);
+
+        let core = if let Some((formula, _)) = formula {
+            if let Ok(false) = solve(formula) {
+                quotient_graph.search_non_descriptive_core(&graph)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+        .expect("Nondescriptive core can only be found for nondescriptive generator subsets!");
         return print_dot(core, &graph);
     }
 

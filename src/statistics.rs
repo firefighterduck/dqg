@@ -77,7 +77,7 @@ pub struct Statistics {
     out_file: PathBuf,
     // Timings
     #[debug(skip)]
-    start_time: Instant,
+    pub start_time: Instant,
     #[debug(with = "opt_fmt")]
     nauty_done_time: Option<Duration>,
     #[debug(with = "opt_fmt")]
