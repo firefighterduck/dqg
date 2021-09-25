@@ -1,0 +1,15 @@
+abstract: "A tool to work with and investigate descriptive quotient graphs."
+authors:
+  - family-names: Sextl
+    given-names: Florian
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+keywords:
+    - research
+    - "automorphism group"
+    - "graph symmetry"
+license: MIT
+repository-code: "https://github.com/firefighterduck/dqg"
+title: "Descriptive Quotient Graphs"
+version: 0.11.0
+type: software
