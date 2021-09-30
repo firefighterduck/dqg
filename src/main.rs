@@ -24,7 +24,7 @@ mod encoding;
 use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
-use sat_solving::{solve, solve_validate};
+use sat_solving::{solve, solve_mus, solve_validate};
 
 mod parser;
 
@@ -179,13 +179,9 @@ fn compute_quotient(
                 None
             }
         } else {
-            let descriptive = solve(formula);
+            let descriptive = solve_mus(formula, dict);
 
-            if descriptive.is_ok() && !descriptive.unwrap() {
-                None
-            } else {
-                Some(quotient_graph)
-            }
+            descriptive.unwrap().map(|_| quotient_graph)
         }
     } else {
         eprintln!("Trivially descriptive");

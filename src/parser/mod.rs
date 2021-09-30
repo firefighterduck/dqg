@@ -1,9 +1,11 @@
 mod csv_parser;
 mod dre_parser;
+mod mus_parser;
 mod txt_parser;
 
 pub use csv_parser::parse_csv_input;
 pub use dre_parser::parse_dreadnaut_input;
+pub use mus_parser::{parse_mus, MUSInput, MUSParseError, MUSParseResult};
 pub use txt_parser::parse_txt_input;
 
 pub type Input<'a> = &'a str;

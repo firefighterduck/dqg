@@ -1,12 +1,19 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    process::{Command, Stdio},
+    sync::Arc,
+};
 
 use itertools::Itertools;
 use kissat_rs::{Assignment, Solver};
 use num::ToPrimitive;
 
 use crate::{
-    encoding::{Clause, SATEncodingDictionary},
+    debug::write_formula_dimacs,
+    encoding::{Clause, QuotientGraphEncoding, SATEncodingDictionary},
     graph::VertexIndex,
+    parser::parse_mus,
     Error,
 };
 
@@ -40,6 +47,72 @@ pub fn solve_validate(
 ) -> Result<Option<Vec<(VertexIndex, VertexIndex)>>, Error> {
     let assignment = Solver::solve_formula(formula).map_err(Error::from)?;
     Ok(assignment.map(|assignment| get_transversal(assignment, dict)))
+}
+
+fn get_core_orbits(
+    clause_indices: &[usize],
+    formula: &[Clause],
+    dict: SATEncodingDictionary,
+) -> Vec<VertexIndex> {
+    let mut core_orbits = Vec::new();
+    let raw_dict = dict.destroy();
+
+    for clause_index in clause_indices {
+        let clause = formula
+            .get(clause_index - 1)
+            .expect("Clause index out of bounds!");
+        for variable in clause {
+            let orbit = raw_dict
+                .get::<usize>(
+                    variable
+                        .abs()
+                        .try_into()
+                        .expect("Could not transform literal to usize!"),
+                )
+                .expect("Variable not in dict!")
+                .0;
+            core_orbits.push(orbit);
+        }
+    }
+
+    core_orbits.sort_unstable();
+    core_orbits.dedup();
+
+    core_orbits
+}
+
+pub fn solve_mus(
+    formula: impl Iterator<Item = Clause>,
+    dict: SATEncodingDictionary,
+) -> Result<Option<QuotientGraphEncoding>, Error> {
+    let formula_collected = formula.collect_vec();
+
+    if Solver::decide_formula(formula_collected.iter().cloned())? {
+        Ok(None)
+    } else {
+        let mut mus = Command::new("picomus")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+        let mut stdin = mus.stdin.take().expect("Failed to open stdin to picomus!");
+
+        let variable_number = dict.variable_number();
+        let formula_arc = Arc::new(formula_collected);
+        let closure_formula_arc = formula_arc.clone();
+        std::thread::spawn(move || {
+            write_formula_dimacs(&mut stdin, &closure_formula_arc, variable_number)
+                .expect("Failed to write to stdin of picomus!")
+        });
+        let mus_out = mus.wait_with_output()?;
+
+        // 20 for Unsatisfiable
+        if mus_out.status.code() == Some(20) {
+            let core = parse_mus(&mus_out.stdout)?;
+            let core_orbits = get_core_orbits(&core, &formula_arc, dict);
+            println!("{:?}", core_orbits);
+        }
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

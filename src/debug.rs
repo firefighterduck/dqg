@@ -1,4 +1,5 @@
 //! Debug facilities.
+use flussab_cnf::cnf::{write_clause, write_header, Header};
 use itertools::Itertools;
 use kissat_rs::Literal;
 use nom::error::{VerboseError, VerboseErrorKind};
@@ -11,7 +12,7 @@ use std::{
 use crate::{
     encoding::{Clause, HighLevelEncoding, QuotientGraphEncoding},
     graph::{Graph, GraphError, VertexIndex},
-    parser::ParseError,
+    parser::{MUSParseError, ParseError},
     quotient::Generator,
     quotient::Orbits,
     statistics::{OrbitStatistics, Statistics},
@@ -74,6 +75,18 @@ impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     }
 }
 
+impl<'a> From<nom::Err<MUSParseError<'a>>> for Error {
+    #[cfg(not(tarpaulin_include))]
+    fn from(pe: nom::Err<MUSParseError<'a>>) -> Self {
+        match pe {
+            nom::Err::Error(verbose) | nom::Err::Failure(verbose) => {
+                Self::ParseError(handle_nom_verbose_error(verbose))
+            }
+            nom::Err::Incomplete(_) => unreachable!(),
+        }
+    }
+}
+
 impl From<kissat_rs::Error> for Error {
     #[cfg(not(tarpaulin_include))]
     fn from(ke: kissat_rs::Error) -> Self {
@@ -126,6 +139,25 @@ fn print_clause<'a>(clause: impl Iterator<Item = &'a Literal>) {
 pub fn print_formula(formula: impl Iterator<Item = Clause>) {
     formula.for_each(|clause| print_clause(clause.iter()));
     println!("True");
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn write_formula_dimacs(
+    writer: &mut impl Write,
+    formula: &[Clause],
+    variable_number: usize,
+) -> Result<(), Error> {
+    let header = Header {
+        var_count: variable_number,
+        clause_count: formula.len(),
+    };
+    write_header(writer, header)?;
+
+    for clause in formula {
+        write_clause(writer, clause)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -284,7 +316,7 @@ macro_rules! print_time_mut {
 macro_rules! parse_single_line {
     ($ret:ident, $exp:expr) => {
         let (res, $ret) = $exp?;
-        eof(res)?;
+        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
     };
 }
 
@@ -305,7 +337,7 @@ macro_rules! get_line_parse {
     ($lines:ident, $ret:ident, $exp:expr) => {
         crate::get_line!(line, $lines);
         let (res, $ret) = $exp(&line)?;
-        eof(res)?;
+        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
     };
 }
 
@@ -314,6 +346,6 @@ macro_rules! get_line_recognize {
     ($lines:ident, $exp:expr) => {
         crate::get_line!(line, $lines);
         let (res, _) = $exp(&line)?;
-        eof(res)?;
+        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
     };
 }

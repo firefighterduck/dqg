@@ -58,6 +58,10 @@ impl SATEncodingDictionary {
         new_literal
     }
 
+    pub fn variable_number(&self) -> usize {
+        self.literal_counter as usize
+    }
+
     pub fn destroy(mut self) -> Vec<(VertexIndex, VertexIndex)> {
         let mut pairs = vec![(-1, -1); self.literal_counter as usize];
         for (pairing, literal) in self.literal_map.drain() {

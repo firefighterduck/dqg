@@ -190,6 +190,7 @@ name = "dqg"
 version = "0.11.0"
 dependencies = [
  "custom_debug_derive",
+ "flussab-cnf",
  "itertools",
  "kissat-rs",
  "libffi",
@@ -218,6 +219,27 @@ dependencies = [
  "log",
  "regex",
  "termcolor",
+]
+
+[[package]]
+name = "flussab"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20534816983b566ad1af7d62967473fa7ecfc063594802b71a97fe772b060d18"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "flussab-cnf"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9af59537a0a2ae3ad0856e84a1c023c0e53bcdfa0a18ca6cbbf4682f94dad790"
+dependencies = [
+ "flussab",
+ "itoa",
+ "num-traits",
+ "thiserror",
 ]
 
 [[package]]
@@ -258,6 +280,12 @@ checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "itoa"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "kissat-rs"
