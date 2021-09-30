@@ -5,6 +5,7 @@ use nom::error::{VerboseError, VerboseErrorKind};
 use std::{
     fmt::{self, Debug, Display},
     io::{self, Write},
+    time::Duration,
 };
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     parser::ParseError,
     quotient::Generator,
     quotient::Orbits,
-    statistics::OrbitStatistics,
+    statistics::{OrbitStatistics, Statistics},
 };
 
 // Error types and From<...> implementations
@@ -128,10 +129,15 @@ pub fn print_formula(formula: impl Iterator<Item = Clause>) {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn print_orbits_nauty_style(orbits: Orbits) {
+pub fn print_orbits_nauty_style(orbits: Orbits, statistics: &Option<Statistics>) {
     // This is necessary to give a correct
     // start point for the output.
-    println!("cpu time = 0.00 seconds");
+    let runtime = if let Some(statistics) = statistics {
+        statistics.start_time.elapsed()
+    } else {
+        Duration::ZERO
+    };
+    println!("cpu time = {:.6} seconds", runtime.as_secs_f64());
 
     orbits
         .encode_high()

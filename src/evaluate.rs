@@ -3,6 +3,7 @@
 //! tool run as experiments.
 
 use std::{
+    cmp::Ordering,
     io::{BufRead, Lines},
     iter::Peekable,
     str::FromStr,
@@ -13,13 +14,13 @@ use crate::{
     MetricUsed,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum PlanResult {
     ValidPlan(usize),
     NotSolved,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum QuotientResult {
     QuotientConcretePlans(PlanResult, PlanResult),
     NoSymmetry,
@@ -27,14 +28,36 @@ pub enum QuotientResult {
     TimedOut,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
+struct ToolStats {
+    search_time: f64,
+    translation_time: f64,
+    quotient_search_time: f64,
+    quotient_translation_time: f64,
+    symm_det_time: f64,
+    colouring_time: f64,
+    inst_find_time: f64,
+}
+
+#[derive(Debug)]
 pub struct Log {
     metric: MetricUsed,
     default_result: PlanResult,
     quotient_result: QuotientResult,
+    tool_stats: ToolStats,
 }
 
-fn evaluate_plan_result<'a>(line: &'a str) -> Option<PlanResult> {
+impl PartialEq for Log {
+    fn eq(&self, other: &Self) -> bool {
+        self.metric == other.metric
+            && self.default_result == other.default_result
+            && self.quotient_result == other.quotient_result
+    }
+}
+
+impl Eq for Log {}
+
+fn evaluate_plan_result<'a>(line: Input<'a>) -> Option<PlanResult> {
     use nom::{
         branch::alt, bytes::complete::tag, character::complete::digit1, combinator::map,
         sequence::preceded,
@@ -53,6 +76,33 @@ fn evaluate_plan_result<'a>(line: &'a str) -> Option<PlanResult> {
         .map(|(_, plan_result)| plan_result)
 }
 
+fn evaluate_tool_stats<'a>(line: &'a str) -> Option<ToolStats> {
+    use nom::{
+        character::complete::{char, i32, multispace0},
+        combinator::recognize,
+        multi::many_m_n,
+        sequence::{preceded, terminated, tuple},
+    };
+
+    let int_parser =
+        terminated::<Input<'a>, i32, Input<'a>, ParseError<'a>, _, _>(i32, multispace0);
+    let float_parser = terminated(recognize(tuple((i32, char('.'), i32))), multispace0);
+    let uninteresting_parser = many_m_n(11, 11, int_parser);
+    let interesting_parser = many_m_n(7, 7, float_parser);
+
+    preceded(uninteresting_parser, interesting_parser)(line)
+        .ok()
+        .map(|(_, times)| ToolStats {
+            search_time: times[0].parse().unwrap(),
+            translation_time: times[1].parse().unwrap(),
+            quotient_search_time: times[2].parse().unwrap(),
+            quotient_translation_time: times[3].parse().unwrap(),
+            symm_det_time: times[4].parse().unwrap(),
+            colouring_time: times[5].parse().unwrap(),
+            inst_find_time: times[6].parse().unwrap(),
+        })
+}
+
 fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Log> {
     let metric = peekable.find_map(|line| {
         line.unwrap()
@@ -60,6 +110,17 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
             .map(|line| MetricUsed::from_str(line).ok())
             .flatten()
     })?;
+    let tool_stats = peekable
+        .peek()
+        .map(|line| {
+            line.as_ref()
+                .unwrap()
+                .strip_suffix(':')
+                .map(evaluate_tool_stats)
+                .flatten()
+        })
+        .flatten()
+        .unwrap_or_else(Default::default);
     let default_result = peekable.find_map(|line| evaluate_plan_result(line.unwrap().as_str()))?;
 
     let mut quotient_result = QuotientResult::TimedOut;
@@ -105,10 +166,8 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
             evaluate_plan_result(peekable.peek().unwrap().as_ref().unwrap().as_str())
         {
             if quotient_next {
-                quotient_result = QuotientResult::QuotientConcretePlans(
-                    plan_result.clone(),
-                    PlanResult::NotSolved,
-                );
+                quotient_result =
+                    QuotientResult::QuotientConcretePlans(plan_result, PlanResult::NotSolved);
                 peekable.next();
                 if matches!(plan_result, PlanResult::NotSolved) {
                     break;
@@ -130,6 +189,7 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
         metric,
         default_result,
         quotient_result,
+        tool_stats,
     })
 }
 
@@ -145,11 +205,108 @@ pub fn evaluate_log_file<B: BufRead>(file_as_lines: &mut Lines<B>) -> Vec<Log> {
     logs
 }
 
+fn compare_results(baseline: &PlanResult, result: &QuotientResult) -> Ordering {
+    use std::cmp::Ordering::*;
+
+    if let PlanResult::ValidPlan(base) = baseline {
+        if let QuotientResult::QuotientConcretePlans(_, result) = result {
+            match result {
+                PlanResult::ValidPlan(result) => base.cmp(result),
+                PlanResult::NotSolved => Less,
+            }
+        } else {
+            Less
+        }
+    } else if let QuotientResult::QuotientConcretePlans(_, result) = result {
+        if matches!(result, PlanResult::ValidPlan(_)) {
+            Greater
+        } else {
+            Equal
+        }
+    } else {
+        Equal
+    }
+}
+
+fn print_eval_results(
+    baseline: &PlanResult,
+    standard: &QuotientResult,
+    standard_result: &Ordering,
+    other: Option<QuotientResult>,
+    name: &str,
+) {
+    if let Some(other) = other {
+        let other_result = compare_results(baseline, &other);
+        match other_result.cmp(standard_result) {
+            Ordering::Greater => println!("Success! {} with {:?}", name, other),
+            Ordering::Equal => {
+                if let QuotientResult::QuotientConcretePlans(_, PlanResult::ValidPlan(n)) = standard
+                {
+                    if let QuotientResult::QuotientConcretePlans(_, PlanResult::ValidPlan(m)) =
+                        other
+                    {
+                        if *n > m {
+                            println!("Success! {} with {:?}", name, other);
+                            return;
+                        }
+                    }
+                }
+
+                println!("No failure! {} with {:?}", name, other);
+            }
+            Ordering::Less => {
+                println!("Failure! {} with {:?}", name, other);
+            }
+        }
+    }
+}
+
+pub fn evaluate_logs(logs: &[Log]) {
+    let mut baseline = None;
+    let mut standard = None;
+    let mut least = None;
+    let mut biggest = None;
+    let mut sparse = None;
+
+    for log in logs {
+        match log.metric {
+            MetricUsed::LeastOrbits => least = Some(log.quotient_result),
+            MetricUsed::BiggestOrbits => biggest = Some(log.quotient_result),
+            MetricUsed::Sparsity => sparse = Some(log.quotient_result),
+            MetricUsed::Standard => {
+                standard = Some(log.quotient_result);
+                baseline = Some(log.default_result);
+            }
+        }
+    }
+
+    if let Some(baseline) = baseline {
+        if let Some(standard) = standard {
+            let standard_result = compare_results(&baseline, &standard);
+            println!("Baseline: {:?} Standard: {:?}", baseline, standard);
+
+            print_eval_results(&baseline, &standard, &standard_result, least, "Least");
+            print_eval_results(&baseline, &standard, &standard_result, biggest, "Biggest");
+            print_eval_results(&baseline, &standard, &standard_result, sparse, "Sparse");
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
 
     use super::*;
+
+    const TEST_STATS: ToolStats = ToolStats {
+        search_time: 4.101270,
+        translation_time: 25.530000,
+        quotient_search_time: -1.000000,
+        quotient_translation_time: 23.060000,
+        symm_det_time: 12.913098,
+        colouring_time: 0.000000,
+        inst_find_time: 0.010000,
+    };
 
     #[test]
     fn test_evaluate_plan_result() {
@@ -170,8 +327,15 @@ mod test {
     }
 
     #[test]
+    fn test_evaluate_tool_stats() {
+        let tool_stats = "6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000";
+        assert_eq!(Some(TEST_STATS), evaluate_tool_stats(tool_stats));
+    }
+
+    #[test]
     fn test_evaluate_log_nondescriptive() {
         let raw = "standard:
+6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000
 The causal graph is not acyclic.
 51 variables of 51 necessary
 Plan is valid and it is of length 36
@@ -201,6 +365,7 @@ No covering instantiations, exiting!!";
             metric: MetricUsed::Standard,
             default_result: PlanResult::ValidPlan(36),
             quotient_result: QuotientResult::Nondescriptive,
+            tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);
     }
@@ -208,6 +373,7 @@ No covering instantiations, exiting!!";
     #[test]
     fn test_evaluate_log_nosymmetry() {
         let raw = "biggest_orbit:
+6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000
 The causal graph is not acyclic.
 
 23 variables of 23 necessary
@@ -248,6 +414,7 @@ No symmetries found, exiting!!";
             metric: MetricUsed::BiggestOrbits,
             default_result: PlanResult::ValidPlan(5),
             quotient_result: QuotientResult::NoSymmetry,
+            tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);
     }
@@ -255,6 +422,7 @@ No symmetries found, exiting!!";
     #[test]
     fn test_evaluate_log_quotient_notsolved() {
         let raw = "least_orbits:
+6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000
 The causal graph is not acyclic.
 408 variables of 408 necessary
 Plan is valid and it is of length 194
@@ -296,6 +464,7 @@ Plan is valid and it is of length 36";
                 PlanResult::NotSolved,
                 PlanResult::NotSolved,
             ),
+            tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);
     }
@@ -303,6 +472,7 @@ Plan is valid and it is of length 36";
     #[test]
     fn test_evaluate_log_concrete_notsolved() {
         let raw = "least_orbits:
+6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000
 The causal graph is not acyclic.
 408 variables of 408 necessary
 The problem was not solved! Plan can't be valid!
@@ -344,6 +514,7 @@ The problem was not solved! Plan can't be valid!";
                 PlanResult::ValidPlan(36),
                 PlanResult::NotSolved,
             ),
+            tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);
     }
@@ -351,6 +522,7 @@ The problem was not solved! Plan can't be valid!";
     #[test]
     fn test_evaluate_log_valid() {
         let raw = "sparsity:
+6464 4482 418 400 109151 -1 10261 -1 98 1 0 4.101270 25.530000 -1.000000 23.060000 12.913098 0.000000 0.010000
 The causal graph is not acyclic.
 51 variables of 51 necessary
 Plan is valid and it is of length 36
@@ -427,6 +599,7 @@ Plan is valid and it is of length 12";
                 PlanResult::ValidPlan(48000),
                 PlanResult::ValidPlan(12),
             ),
+            tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);
     }
@@ -472,6 +645,7 @@ sparsity:";
             metric: MetricUsed::LeastOrbits,
             default_result: PlanResult::NotSolved,
             quotient_result: QuotientResult::TimedOut,
+            tool_stats: Default::default(),
         });
         assert_eq!(expected_log, log);
     }

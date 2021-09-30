@@ -32,7 +32,7 @@ impl Default for NautyTraces {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetricUsed {
     LeastOrbits,
     BiggestOrbits,
