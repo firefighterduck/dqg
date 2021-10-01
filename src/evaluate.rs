@@ -205,6 +205,7 @@ pub fn evaluate_log_file<B: BufRead>(file_as_lines: &mut Lines<B>) -> Vec<Log> {
     logs
 }
 
+#[cfg(not(tarpaulin_include))]
 fn compare_results(baseline: &PlanResult, result: &QuotientResult) -> Ordering {
     use std::cmp::Ordering::*;
 
@@ -228,6 +229,7 @@ fn compare_results(baseline: &PlanResult, result: &QuotientResult) -> Ordering {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn print_eval_results(
     baseline: &PlanResult,
     standard: &QuotientResult,
@@ -261,6 +263,7 @@ fn print_eval_results(
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn evaluate_logs(logs: &[Log]) {
     let mut baseline = None;
     let mut standard = None;

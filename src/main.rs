@@ -113,7 +113,8 @@ fn compute_quotient_with_statistics(
                     Err(err) => (Err(err), None),
                 }
             } else {
-                (solve(formula), None)
+                let descriptive = solve_mus(formula, &quotient_graph, graph, dict);
+                (descriptive.map(|core| core.is_none()), None)
             }
         });
         let (descriptive, validated) = descriptive_validated;
@@ -179,7 +180,7 @@ fn compute_quotient(
                 None
             }
         } else {
-            let descriptive = solve_mus(formula, dict);
+            let descriptive = solve_mus(formula, &quotient_graph, graph, dict);
 
             descriptive.unwrap().map(|_| quotient_graph)
         }

@@ -218,6 +218,47 @@ impl Graph {
             self.state = GraphState::IndexOrdered;
         }
     }
+
+    pub fn induce_subgraph(
+        &self,
+        remaining_vertices: &[VertexIndex],
+        vertex_list_sorted: bool,
+    ) -> Result<Self, GraphError> {
+        let mut subgraph = Self::new_with_indices(remaining_vertices, vertex_list_sorted);
+
+        for vertex in self.vertices.iter() {
+            let include = {
+                if vertex_list_sorted {
+                    remaining_vertices.binary_search(&vertex.index).is_ok()
+                } else {
+                    remaining_vertices.contains(&vertex.index)
+                }
+            };
+
+            if include {
+                let new_vertex = subgraph.get_vertex_mut(vertex.index)?;
+                new_vertex.colour = vertex.colour;
+                let sub_edges = vertex
+                    .edges_to
+                    .iter()
+                    .cloned()
+                    .filter(|vertex| {
+                        if vertex_list_sorted {
+                            remaining_vertices.binary_search(vertex).is_ok()
+                        } else {
+                            remaining_vertices.contains(vertex)
+                        }
+                    })
+                    .collect();
+                new_vertex.edges_to = sub_edges;
+            }
+        }
+
+        let sub_edge_number = subgraph.iterate_edges().count();
+        subgraph.edge_number = sub_edge_number;
+
+        Ok(subgraph)
+    }
 }
 
 impl Vertex {
@@ -307,7 +348,7 @@ mod test {
     }
 
     #[test]
-    fn test_get_vertex() {
+    fn test_get_vertex() -> Result<(), GraphError> {
         let mut graph = Graph::new_ordered(5);
         assert_eq!(5, graph.size());
         assert_eq!(GraphState::IndexOrdered, graph.state);
@@ -315,9 +356,8 @@ mod test {
         // First with IndexOrdered
 
         // In bounds
-        let valid_result = graph.get_vertex_mut(2);
-        assert!(valid_result.is_ok());
-        assert_eq!(&mut Vertex::new(2, DEFAULT_COLOR), valid_result.unwrap());
+        let valid_result = graph.get_vertex_mut(2)?;
+        assert_eq!(&mut Vertex::new(2, DEFAULT_COLOR), valid_result);
 
         // Negative index
         assert_eq!(Err(GraphError(-3)), graph.get_vertex_mut(-3));
@@ -329,14 +369,35 @@ mod test {
         graph.state = GraphState::Chaos;
 
         // In bounds
-        let valid_result = graph.get_vertex_mut(3);
-        assert!(valid_result.is_ok());
-        assert_eq!(&mut Vertex::new(3, DEFAULT_COLOR), valid_result.unwrap());
+        let valid_result = graph.get_vertex_mut(3)?;
+        assert_eq!(&mut Vertex::new(3, DEFAULT_COLOR), valid_result);
 
         // Negative index
         assert_eq!(Err(GraphError(-1)), graph.get_vertex_mut(-1));
 
         // Index out of bounds
         assert_eq!(Err(GraphError(5)), graph.get_vertex_mut(5));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_induce_subgraph() -> Result<(), GraphError> {
+        let mut graph = Graph::new_ordered(5);
+        for i in 0..4 {
+            graph.add_edge(i, i + 1)?;
+        }
+
+        let vertex_subset = vec![1, 3, 4];
+
+        let mut expected_subgraph = Graph::new_with_indices(&vertex_subset, true);
+        expected_subgraph.add_edge(3, 4)?;
+
+        assert_eq!(
+            expected_subgraph,
+            graph.induce_subgraph(&vertex_subset, true)?
+        );
+
+        Ok(())
     }
 }

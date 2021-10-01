@@ -15,7 +15,7 @@ use crate::{
     encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     permutation::Permutation,
-    Settings,
+    Error, Settings,
 };
 
 pub type Orbits = Vec<VertexIndex>;
@@ -403,28 +403,42 @@ impl QuotientGraph {
                 }
             })
     }
+
+    pub fn induced_subquotient(&self, orbit_subset: &[VertexIndex]) -> Result<Self, Error> {
+        let mut sub_orbits = self.orbits.clone();
+        sub_orbits.iter_mut().for_each(|orbit| {
+            if orbit_subset.binary_search(orbit).is_err() {
+                *orbit = -1;
+            }
+        });
+
+        Ok(QuotientGraph {
+            quotient_graph: self.quotient_graph.induce_subgraph(orbit_subset, true)?,
+            orbits: sub_orbits,
+        })
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::graph::GraphError;
+    use crate::{graph::GraphError, Error};
 
     #[test]
-    fn test_from_graph_orbits() {
+    fn test_from_graph_orbits() -> Result<(), Error> {
         let mut graph = Graph::new_ordered(8);
-        assert_eq!(Ok(()), graph.add_edge(0, 1));
-        assert_eq!(Ok(()), graph.add_edge(0, 3));
-        assert_eq!(Ok(()), graph.add_edge(0, 4));
-        assert_eq!(Ok(()), graph.add_edge(1, 2));
-        assert_eq!(Ok(()), graph.add_edge(1, 5));
-        assert_eq!(Ok(()), graph.add_edge(2, 3));
-        assert_eq!(Ok(()), graph.add_edge(2, 6));
-        assert_eq!(Ok(()), graph.add_edge(3, 7));
-        assert_eq!(Ok(()), graph.add_edge(4, 5));
-        assert_eq!(Ok(()), graph.add_edge(4, 7));
-        assert_eq!(Ok(()), graph.add_edge(5, 6));
-        assert_eq!(Ok(()), graph.add_edge(6, 7));
+        graph.add_edge(0, 1)?;
+        graph.add_edge(0, 3)?;
+        graph.add_edge(0, 4)?;
+        graph.add_edge(1, 2)?;
+        graph.add_edge(1, 5)?;
+        graph.add_edge(2, 3)?;
+        graph.add_edge(2, 6)?;
+        graph.add_edge(3, 7)?;
+        graph.add_edge(4, 5)?;
+        graph.add_edge(4, 7)?;
+        graph.add_edge(5, 6)?;
+        graph.add_edge(6, 7)?;
 
         let orbits = vec![0, 1, 2, 1, 4, 0, 1, 0];
 
@@ -443,22 +457,10 @@ mod test {
         expected_vert4.add_edge(0);
 
         assert_eq!(4, quotient.quotient_graph.size());
-        assert_eq!(
-            expected_vert0,
-            *quotient.quotient_graph.get_vertex(0).unwrap()
-        );
-        assert_eq!(
-            expected_vert1,
-            *quotient.quotient_graph.get_vertex(1).unwrap()
-        );
-        assert_eq!(
-            expected_vert2,
-            *quotient.quotient_graph.get_vertex(2).unwrap()
-        );
-        assert_eq!(
-            expected_vert4,
-            *quotient.quotient_graph.get_vertex(4).unwrap()
-        );
+        assert_eq!(expected_vert0, *quotient.quotient_graph.get_vertex(0)?);
+        assert_eq!(expected_vert1, *quotient.quotient_graph.get_vertex(1)?);
+        assert_eq!(expected_vert2, *quotient.quotient_graph.get_vertex(2)?);
+        assert_eq!(expected_vert4, *quotient.quotient_graph.get_vertex(4)?);
 
         // Single orbit
         let graph = Graph::new_ordered(1);
@@ -468,9 +470,11 @@ mod test {
         assert_eq!(orbits, quotient.orbits);
         assert_eq!(
             Vertex::new(0, DEFAULT_COLOR),
-            *quotient.quotient_graph.get_vertex(0).unwrap()
+            *quotient.quotient_graph.get_vertex(0)?
         );
         assert_eq!(1, quotient.quotient_graph.size());
+
+        Ok(())
     }
 
     #[test]

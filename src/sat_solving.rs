@@ -11,9 +11,12 @@ use num::ToPrimitive;
 
 use crate::{
     debug::write_formula_dimacs,
-    encoding::{Clause, QuotientGraphEncoding, SATEncodingDictionary},
-    graph::VertexIndex,
+    encoding::{
+        encode_problem, Clause, HighLevelEncoding, QuotientGraphEncoding, SATEncodingDictionary,
+    },
+    graph::{Graph, VertexIndex},
     parser::parse_mus,
+    quotient::QuotientGraph,
     Error,
 };
 
@@ -41,6 +44,7 @@ fn get_transversal(
     picked
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn solve_validate(
     formula: impl Iterator<Item = Clause>,
     dict: SATEncodingDictionary,
@@ -81,8 +85,11 @@ fn get_core_orbits(
     core_orbits
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn solve_mus(
     formula: impl Iterator<Item = Clause>,
+    quotient_graph: &QuotientGraph,
+    graph: &Graph,
     dict: SATEncodingDictionary,
 ) -> Result<Option<QuotientGraphEncoding>, Error> {
     let formula_collected = formula.collect_vec();
@@ -109,9 +116,17 @@ pub fn solve_mus(
         if mus_out.status.code() == Some(20) {
             let core = parse_mus(&mus_out.stdout)?;
             let core_orbits = get_core_orbits(&core, &formula_arc, dict);
-            println!("{:?}", core_orbits);
+            let sub_quotient = quotient_graph.induced_subquotient(&core_orbits)?;
+
+            // Make sure that the found orbits are in fact a non-descriptive core.
+            // I don't really doubt picmus, but who knows what kind of MUS it finds.
+            let (formula, _) = encode_problem(&sub_quotient, &graph).unwrap();
+            assert!(matches!(solve(formula), Ok(false)));
+
+            Ok(Some(sub_quotient.encode_high()))
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 }
 
@@ -142,5 +157,54 @@ mod test {
         assert_eq!(false, result.unwrap());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_get_transversal() {
+        // Orbit 1: {0,1}
+        // orbit 2: {2,3}
+        // Edges: 0-2,1-3
+        // Transversal: 0|->0,2|->3
+
+        let mut assignment = HashMap::new();
+        assignment.insert(1, Some(Assignment::True));
+        assignment.insert(2, Some(Assignment::False));
+        assignment.insert(3, Some(Assignment::True));
+        assignment.insert(4, Some(Assignment::False));
+
+        let mut dict = SATEncodingDictionary::default();
+        assert_eq!(1, dict.lookup_pairing(0, 0));
+        assert_eq!(2, dict.lookup_pairing(0, 1));
+        assert_eq!(3, dict.lookup_pairing(2, 3));
+        assert_eq!(4, dict.lookup_pairing(2, 2));
+
+        let expected_transversal = vec![(0, 0), (2, 3)];
+        assert_eq!(expected_transversal, get_transversal(assignment, dict));
+    }
+
+    #[test]
+    fn test_get_core_orbits() {
+        let mut dict = SATEncodingDictionary::default();
+        let pairs = vec![
+            (14, 14),
+            (14, 34),
+            (22, 22),
+            (22, 26),
+            (134, 144),
+            (134, 134),
+            (154, 154),
+            (154, 158),
+            (127, 127),
+        ];
+        for (index, (orbit, vertex)) in pairs.into_iter().enumerate() {
+            assert_eq!(index as VertexIndex + 1, dict.lookup_pairing(orbit, vertex));
+        }
+
+        let formula = vec![vec![1, 2], vec![-1, -2], vec![3, 4], vec![-3, -4], vec![9]];
+        let core = vec![1, 3, 5];
+
+        let expected_orbits = vec![14, 22, 127];
+
+        assert_eq!(expected_orbits, get_core_orbits(&core, &formula, dict));
     }
 }
