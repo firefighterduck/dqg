@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
     convert::TryInto,
+    fs::File,
     process::{Command, Stdio},
     sync::Arc,
 };
 
+use flussab_cnf::cnf::Parser;
 use itertools::Itertools;
 use kissat_rs::{Assignment, Solver};
 use num::ToPrimitive;
@@ -53,18 +55,28 @@ pub fn solve_validate(
     Ok(assignment.map(|assignment| get_transversal(assignment, dict)))
 }
 
-fn get_core_orbits(
+fn get_core_orbits_indexed(
     clause_indices: &[usize],
     formula: &[Clause],
     dict: SATEncodingDictionary,
 ) -> Vec<VertexIndex> {
+    let core_formula = clause_indices
+        .iter()
+        .map(|index| {
+            formula
+                .get(index - 1)
+                .expect("Clause index out of range!")
+                .clone()
+        })
+        .collect_vec();
+    get_core_orbits(&core_formula, dict)
+}
+
+fn get_core_orbits(core_formula: &[Clause], dict: SATEncodingDictionary) -> Vec<VertexIndex> {
     let mut core_orbits = Vec::new();
     let raw_dict = dict.destroy();
 
-    for clause_index in clause_indices {
-        let clause = formula
-            .get(clause_index - 1)
-            .expect("Clause index out of bounds!");
+    for clause in core_formula {
         for variable in clause {
             let orbit = raw_dict
                 .get::<usize>(
@@ -115,12 +127,65 @@ pub fn solve_mus(
         // 20 for Unsatisfiable
         if mus_out.status.code() == Some(20) {
             let core = parse_mus(&mus_out.stdout)?;
-            let core_orbits = get_core_orbits(&core, &formula_arc, dict);
+            let core_orbits = get_core_orbits_indexed(&core, &formula_arc, dict);
             let sub_quotient = quotient_graph.induced_subquotient(&core_orbits)?;
 
             // Make sure that the found orbits are in fact a non-descriptive core.
             // I don't really doubt picmus, but who knows what kind of MUS it finds.
-            let (formula, _) = encode_problem(&sub_quotient, &graph).unwrap();
+            let (formula, _) = encode_problem(&sub_quotient, graph).unwrap();
+            assert!(matches!(solve(formula), Ok(false)));
+
+            Ok(Some(sub_quotient.encode_high()))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
+pub fn solve_mus_kitten(
+    formula: impl Iterator<Item = Clause>,
+    quotient_graph: &QuotientGraph,
+    graph: &Graph,
+    dict: SATEncodingDictionary,
+) -> Result<Option<QuotientGraphEncoding>, Error> {
+    let formula_collected = formula.collect_vec();
+
+    if Solver::decide_formula(formula_collected.iter().cloned())? {
+        Ok(None)
+    } else {
+        let mut dqg_file = File::create("./dqg.cnf")?;
+        let variable_number = dict.variable_number();
+        write_formula_dimacs(&mut dqg_file, &formula_collected, variable_number)?;
+
+        let mut kitten = Command::new("./kitten")
+            .arg("-O25")
+            .arg("./dqg.cnf")
+            .arg("./core.cnf")
+            .stdout(Stdio::piped())
+            .spawn()?;
+        let kitten_exit = kitten.wait()?;
+
+        // 20 for Unsatisfiable
+        if kitten_exit.code() == Some(20) {
+            let core_file = File::open("./core.cnf")?;
+            let mut core_parser = Parser::from_read(core_file, true).unwrap();
+            let mut core: Vec<Vec<VertexIndex>> = Vec::new();
+
+            loop {
+                let next = core_parser.next_clause().unwrap();
+                match next {
+                    Some(clause) => core.push(clause.to_vec()),
+                    None => break,
+                }
+            }
+
+            let core_orbits = get_core_orbits(&core, dict);
+            let sub_quotient = quotient_graph.induced_subquotient(&core_orbits)?;
+
+            // Make sure that the found orbits are in fact a non-descriptive core.
+            // I don't really doubt picmus, but who knows what kind of MUS it finds.
+            let (formula, _) = encode_problem(&sub_quotient, graph).unwrap();
             assert!(matches!(solve(formula), Ok(false)));
 
             Ok(Some(sub_quotient.encode_high()))
@@ -183,7 +248,7 @@ mod test {
     }
 
     #[test]
-    fn test_get_core_orbits() {
+    fn test_get_core_orbits_indexed() {
         let mut dict = SATEncodingDictionary::default();
         let pairs = vec![
             (14, 14),
@@ -205,6 +270,9 @@ mod test {
 
         let expected_orbits = vec![14, 22, 127];
 
-        assert_eq!(expected_orbits, get_core_orbits(&core, &formula, dict));
+        assert_eq!(
+            expected_orbits,
+            get_core_orbits_indexed(&core, &formula, dict)
+        );
     }
 }

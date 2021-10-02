@@ -24,7 +24,7 @@ mod encoding;
 use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
-use sat_solving::{solve, solve_mus, solve_validate};
+use sat_solving::{solve, solve_mus, solve_mus_kitten, solve_validate};
 
 mod parser;
 
@@ -86,6 +86,8 @@ fn compute_quotient_with_statistics(
         encode_problem(&quotient_graph, graph)
     );
 
+    let mut core_size = None;
+
     if let Some((formula, dict)) = formula {
         if settings.print_formula {
             print_formula(formula);
@@ -113,8 +115,18 @@ fn compute_quotient_with_statistics(
                     Err(err) => (Err(err), None),
                 }
             } else {
-                let descriptive = solve_mus(formula, &quotient_graph, graph, dict);
-                (descriptive.map(|core| core.is_none()), None)
+                let descriptive = solve_mus_kitten(formula, &quotient_graph, graph, dict);
+                (
+                    descriptive.map(|core| {
+                        if let Some(core) = core {
+                            core_size = Some(core.1.len());
+                            false
+                        } else {
+                            true
+                        }
+                    }),
+                    None,
+                )
             }
         });
         let (descriptive, validated) = descriptive_validated;
@@ -128,6 +140,7 @@ fn compute_quotient_with_statistics(
         let quotient_handling_time = start_time.elapsed();
         let quotient_stats = QuotientStatistics {
             quotient_size,
+            core_size,
             max_orbit_size,
             min_orbit_size,
             descriptive,

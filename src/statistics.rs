@@ -54,6 +54,8 @@ impl OrbitStatistics {
 #[derive(Debug)]
 pub struct QuotientStatistics {
     pub quotient_size: usize,
+    #[debug(with = "opt_fmt")]
+    pub core_size: Option<usize>,
     pub max_orbit_size: usize,
     pub min_orbit_size: usize,
     #[debug(with = "result_fmt")]
