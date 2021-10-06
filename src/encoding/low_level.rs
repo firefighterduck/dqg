@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 use crate::graph::Graph;
 
 use super::{
@@ -25,31 +23,17 @@ impl SATEncoding for OrbitEncoding {
         // - matrix: how the heck does this even, 2*sqrt(n) aux vars, 1 n-ary clause, 1 sqrt(n)-ary clause, 1 n/sqrt(n)-ary clause, 2n+4*sqrt(n)+O(fourth root n) binary clauses
 
         // For now we use pairwise encoding, because it's easy to implement
+        // Disjunction of all vertex-in-orbit pairs to encode AT LEAST ONE
+        // ---------------------------------------------------------------
+        // \/ vi for all vi in the orbit
         let (orbit, orbit_elements) = self;
-        let mut formula = Vec::new();
         let mut orbit_element_encodings = Vec::with_capacity(orbit_elements.len());
 
         for orbit_element in orbit_elements {
             orbit_element_encodings.push(dict.lookup_pairing(*orbit, *orbit_element));
         }
 
-        // Pairwise mutual exclusion of orbit elements picked by the transversal.
-        // Thus AT MOST ONE of these can be true.
-        orbit_element_encodings
-            .iter()
-            .combinations(2)
-            .for_each(|encoding_pair| {
-                // -v1 || -v2; v1!=v2; v1, v2 in the given orbit
-                formula.push(vec![-encoding_pair[0], -encoding_pair[1]]);
-            });
-
-        // Disjunction of all vertex-in-orbit pairs to encode AT LEAST ONE
-        // ---------------------------------------------------------------
-        // \/ vi for all vi in the orbit
-        formula.push(orbit_element_encodings);
-
-        // The EXACTLY ONE encoding for elements in the orbit picked by the transversal.
-        formula
+        vec![orbit_element_encodings]
     }
 }
 

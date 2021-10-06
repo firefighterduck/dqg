@@ -4,6 +4,7 @@
 
 use std::{
     cmp::Ordering,
+    fmt::Display,
     io::{BufRead, Lines},
     iter::Peekable,
     str::FromStr,
@@ -37,6 +38,22 @@ struct ToolStats {
     symm_det_time: f64,
     colouring_time: f64,
     inst_find_time: f64,
+}
+
+impl Display for ToolStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:.6} {:.6} {:.6} {:.6} {:.6} {:.6} {:.6}",
+            self.search_time,
+            self.translation_time,
+            self.quotient_search_time,
+            self.quotient_translation_time,
+            self.symm_det_time,
+            self.colouring_time,
+            self.inst_find_time
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -111,14 +128,8 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
             .flatten()
     })?;
     let tool_stats = peekable
-        .peek()
-        .map(|line| {
-            line.as_ref()
-                .unwrap()
-                .strip_suffix(':')
-                .map(evaluate_tool_stats)
-                .flatten()
-        })
+        .next()
+        .map(|line| evaluate_tool_stats(line.as_ref().unwrap()))
         .flatten()
         .unwrap_or_else(Default::default);
     let default_result = peekable.find_map(|line| evaluate_plan_result(line.unwrap().as_str()))?;
@@ -234,37 +245,37 @@ fn print_eval_results(
     baseline: &PlanResult,
     standard: &QuotientResult,
     standard_result: &Ordering,
-    other: Option<QuotientResult>,
+    result: Option<(QuotientResult, ToolStats)>,
     name: &str,
 ) {
-    if let Some(other) = other {
-        let other_result = compare_results(baseline, &other);
+    if let Some((result, stats)) = result {
+        let other_result = compare_results(baseline, &result);
         match other_result.cmp(standard_result) {
-            Ordering::Greater => println!("Success! {} with {:?}", name, other),
+            Ordering::Greater => println!("Success! {:?} for {}: {}", result, name, stats),
             Ordering::Equal => {
                 if let QuotientResult::QuotientConcretePlans(_, PlanResult::ValidPlan(n)) = standard
                 {
                     if let QuotientResult::QuotientConcretePlans(_, PlanResult::ValidPlan(m)) =
-                        other
+                        result
                     {
                         if *n > m {
-                            println!("Success! {} with {:?}", name, other);
+                            println!("Success! {:?} for {}: {}", result, name, stats);
                             return;
                         }
                     }
                 }
 
-                println!("No failure! {} with {:?}", name, other);
+                println!("No failure! {:?} for {}: {}", result, name, stats);
             }
             Ordering::Less => {
-                println!("Failure! {} with {:?}", name, other);
+                println!("Failure! {:?} for {}: {}", result, name, stats);
             }
         }
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn evaluate_logs(logs: &[Log]) {
+pub fn evaluate_logs(logs: Vec<Log>) {
     let mut baseline = None;
     let mut standard = None;
     let mut least = None;
@@ -273,11 +284,11 @@ pub fn evaluate_logs(logs: &[Log]) {
 
     for log in logs {
         match log.metric {
-            MetricUsed::LeastOrbits => least = Some(log.quotient_result),
-            MetricUsed::BiggestOrbits => biggest = Some(log.quotient_result),
-            MetricUsed::Sparsity => sparse = Some(log.quotient_result),
+            MetricUsed::LeastOrbits => least = Some((log.quotient_result, log.tool_stats)),
+            MetricUsed::BiggestOrbits => biggest = Some((log.quotient_result, log.tool_stats)),
+            MetricUsed::Sparsity => sparse = Some((log.quotient_result, log.tool_stats)),
             MetricUsed::Standard => {
-                standard = Some(log.quotient_result);
+                standard = Some((log.quotient_result, log.tool_stats));
                 baseline = Some(log.default_result);
             }
         }
@@ -285,12 +296,15 @@ pub fn evaluate_logs(logs: &[Log]) {
 
     if let Some(baseline) = baseline {
         if let Some(standard) = standard {
-            let standard_result = compare_results(&baseline, &standard);
-            println!("Baseline: {:?} Standard: {:?}", baseline, standard);
+            let standard_result = compare_results(&baseline, &standard.0);
+            println!(
+                "Baseline: {:?} Standard: {:?}, {}",
+                baseline, standard.0, standard.1
+            );
 
-            print_eval_results(&baseline, &standard, &standard_result, least, "Least");
-            print_eval_results(&baseline, &standard, &standard_result, biggest, "Biggest");
-            print_eval_results(&baseline, &standard, &standard_result, sparse, "Sparse");
+            print_eval_results(&baseline, &standard.0, &standard_result, least, "Least");
+            print_eval_results(&baseline, &standard.0, &standard_result, biggest, "Biggest");
+            print_eval_results(&baseline, &standard.0, &standard_result, sparse, "Sparse");
         }
     }
 }

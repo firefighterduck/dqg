@@ -87,7 +87,6 @@ mod test {
             // vertex 0 in orbit 0
             vec![1],
             // Exactly one of 1,2 in orbit 1
-            vec![-2, -3],
             vec![2, 3],
             // vertex 3 in orbit 3
             vec![4],
@@ -166,19 +165,11 @@ mod test {
         assert_eq!(2, pick1);
         assert_eq!(3, pick4);
 
-        let at_least_one = vec![pick0, pick1, pick4];
-        let at_most_one = vec![
-            vec![-pick0, -pick1],
-            vec![-pick0, -pick4],
-            vec![-pick1, -pick4],
-        ];
+        let at_least_one = vec![vec![pick0, pick1, pick4]];
 
         let formula = orbit_encoding.encode_sat(&mut dict, &some_graph);
-        assert_eq!(4, formula.len());
-        assert!(formula.contains(&at_least_one));
-        for mut_ex in at_most_one {
-            assert!(formula.contains(&mut_ex));
-        }
+        assert_eq!(1, formula.len());
+        assert_eq!(at_least_one, formula);
     }
 
     #[test]

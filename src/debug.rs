@@ -12,8 +12,8 @@ use std::{
 use crate::{
     encoding::{Clause, HighLevelEncoding, QuotientGraphEncoding},
     graph::{Graph, GraphError, VertexIndex},
-    parser::{MUSParseError, ParseError},
-    quotient::Generator,
+    parser::{BinParseError, ParseError},
+    permutation::Permutation,
     quotient::Orbits,
     statistics::{OrbitStatistics, Statistics},
 };
@@ -52,12 +52,17 @@ impl From<GraphError> for Error {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn handle_nom_verbose_error<E: Debug>(verbose: VerboseError<E>) -> Vec<VerboseErrorKind> {
+fn handle_nom_verbose_error<E: Debug>(
+    should_print: bool,
+    verbose: VerboseError<E>,
+) -> Vec<VerboseErrorKind> {
     verbose
         .errors
         .into_iter()
         .map(|(msg, kind)| {
-            eprintln!("{:?}", msg);
+            if should_print {
+                eprintln!("{:?}", msg);
+            }
             kind
         })
         .collect()
@@ -68,19 +73,19 @@ impl<'a> From<nom::Err<ParseError<'a>>> for Error {
     fn from(pe: nom::Err<ParseError<'a>>) -> Self {
         match pe {
             nom::Err::Error(verbose) | nom::Err::Failure(verbose) => {
-                Self::ParseError(handle_nom_verbose_error(verbose))
+                Self::ParseError(handle_nom_verbose_error(true, verbose))
             }
             nom::Err::Incomplete(_) => unreachable!(),
         }
     }
 }
 
-impl<'a> From<nom::Err<MUSParseError<'a>>> for Error {
+impl<'a> From<nom::Err<BinParseError<'a>>> for Error {
     #[cfg(not(tarpaulin_include))]
-    fn from(pe: nom::Err<MUSParseError<'a>>) -> Self {
+    fn from(pe: nom::Err<BinParseError<'a>>) -> Self {
         match pe {
             nom::Err::Error(verbose) | nom::Err::Failure(verbose) => {
-                Self::ParseError(handle_nom_verbose_error(verbose))
+                Self::ParseError(handle_nom_verbose_error(false, verbose))
             }
             nom::Err::Incomplete(_) => unreachable!(),
         }
@@ -157,11 +162,11 @@ pub fn write_formula_dimacs(
         write_clause(writer, clause)?;
     }
 
-    Ok(())
+    writer.flush().map_err(Error::from)
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn print_orbits_nauty_style(orbits: Orbits, statistics: &Option<Statistics>) {
+pub fn print_orbits_nauty_style(orbits: Orbits, statistics: Option<&Statistics>) {
     // This is necessary to give a correct
     // start point for the output.
     let runtime = if let Some(statistics) = statistics {
@@ -191,7 +196,7 @@ pub fn print_orbits_nauty_style(orbits: Orbits, statistics: &Option<Statistics>)
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn print_generator(mut generator: Generator) {
+pub fn print_generator(mut generator: Permutation) {
     let cycles = generator.get_cycles();
 
     if cycles.is_empty() {

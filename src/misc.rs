@@ -107,6 +107,10 @@ pub struct Settings {
     /// with exhaustive search for consistent
     /// transversals.
     pub validate: bool,
+    /// Operate in GAP mode.
+    /// This means that DQG use GAP to
+    /// search in the conjugacy classes.
+    pub gap_mode: bool,
     /// Use the given metric to find the "best" quotient
     /// and use it as described by the other flags.
     pub metric: Option<MetricUsed>,

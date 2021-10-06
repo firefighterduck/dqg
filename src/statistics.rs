@@ -9,8 +9,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::debug::{opt_fmt, result_fmt};
-use crate::{encoding::OrbitEncoding, Error};
+use crate::{
+    debug::{opt_fmt, result_fmt},
+    encoding::OrbitEncoding,
+    Error,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StatisticsLevel {
@@ -83,6 +86,8 @@ pub struct Statistics {
     #[debug(with = "opt_fmt")]
     nauty_done_time: Option<Duration>,
     #[debug(with = "opt_fmt")]
+    gap_done_time: Option<Duration>,
+    #[debug(with = "opt_fmt")]
     end_time: Option<Duration>,
     #[debug(with = "opt_fmt")]
     graph_sort_time: Option<Duration>,
@@ -110,6 +115,7 @@ impl Statistics {
             out_file,
             start_time: Instant::now(),
             nauty_done_time: None,
+            gap_done_time: None,
             end_time: None,
             graph_sort_time: None,
             graph_size,
@@ -126,6 +132,11 @@ impl Statistics {
     #[cfg(not(tarpaulin_include))]
     pub fn log_nauty_done(&mut self) {
         self.nauty_done_time = Some(self.start_time.elapsed());
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_gap_done(&mut self, duration: Duration) {
+        self.gap_done_time = Some(duration);
     }
 
     #[cfg(not(tarpaulin_include))]

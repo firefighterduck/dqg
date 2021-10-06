@@ -2,11 +2,11 @@
 
 use crate::Error;
 
-pub type MUSInput<'a> = &'a [u8];
-pub type MUSParseError<'a> = nom::error::VerboseError<MUSInput<'a>>;
-pub type MUSParseResult<'a, O> = nom::IResult<MUSInput<'a>, O, MUSParseError<'a>>;
+pub type BinInput<'a> = &'a [u8];
+pub type BinParseError<'a> = nom::error::VerboseError<BinInput<'a>>;
+pub type BinParseResult<'a, O> = nom::IResult<BinInput<'a>, O, BinParseError<'a>>;
 
-fn parse_comment(input: MUSInput<'_>) -> MUSParseResult<'_, ()> {
+fn parse_comment(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     use nom::{
         character::complete::{char, line_ending, not_line_ending},
         combinator::value,
@@ -24,7 +24,7 @@ fn parse_comment(input: MUSInput<'_>) -> MUSParseResult<'_, ()> {
     )(input)
 }
 
-fn parse_unsat(input: MUSInput<'_>) -> MUSParseResult<'_, ()> {
+fn parse_unsat(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     use nom::{
         bytes::complete::tag, character::complete::line_ending, combinator::value, error::context,
         sequence::pair,
@@ -36,7 +36,7 @@ fn parse_unsat(input: MUSInput<'_>) -> MUSParseResult<'_, ()> {
     )(input)
 }
 
-fn parse_clause_number(input: MUSInput<'_>) -> MUSParseResult<'_, usize> {
+fn parse_clause_number(input: BinInput<'_>) -> BinParseResult<'_, usize> {
     use nom::{
         bytes::complete::tag,
         character::complete::{line_ending, u64},
@@ -55,7 +55,7 @@ fn parse_clause_number(input: MUSInput<'_>) -> MUSParseResult<'_, usize> {
 }
 
 /// Parse output of picomus and return core as clause indices.
-pub fn parse_mus(input: MUSInput<'_>) -> Result<Vec<usize>, Error> {
+pub fn parse_mus(input: BinInput<'_>) -> Result<Vec<usize>, Error> {
     use nom::{
         branch::alt,
         combinator::eof,
@@ -73,7 +73,7 @@ pub fn parse_mus(input: MUSInput<'_>) -> Result<Vec<usize>, Error> {
 
     let (res, _) = skip(input)?;
     let (res, mut core) = core_clauses(res)?;
-    eof::<MUSInput<'_>, MUSParseError<'_>>(res)?;
+    eof::<BinInput<'_>, BinParseError<'_>>(res)?;
 
     let last = core.pop();
     assert_eq!(

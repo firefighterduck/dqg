@@ -17,7 +17,7 @@ use input::read_graph;
 mod quotient;
 use quotient::{
     compute_generators_with_nauty, compute_generators_with_traces, empty_orbits, generate_orbits,
-    search_group, Generator, Orbits, QuotientGraph,
+    search_group, Orbits, QuotientGraph,
 };
 
 mod encoding;
@@ -36,6 +36,7 @@ pub use debug::Error;
 use debug::{print_dot, print_formula, print_orbits_nauty_style};
 
 mod permutation;
+use permutation::Permutation;
 
 mod metric;
 
@@ -48,9 +49,12 @@ pub use misc::{do_if_some, MetricUsed, NautyTraces, Settings};
 mod evaluate;
 use evaluate::{evaluate_log_file, evaluate_logs};
 
+mod gap;
+use gap::gap_mode;
+
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
-    generators_subset: &mut [Generator],
+    generators_subset: &mut [Permutation],
     graph: &Graph,
     settings: &Settings,
     statistics: &mut Statistics,
@@ -85,7 +89,6 @@ fn compute_quotient_with_statistics(
         formula,
         encode_problem(&quotient_graph, graph)
     );
-
     let mut core_size = None;
 
     if let Some((formula, dict)) = formula {
@@ -164,7 +167,7 @@ fn compute_quotient_with_statistics(
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient(
-    generators_subset: &mut [Generator],
+    generators_subset: &mut [Permutation],
     graph: &Graph,
     settings: &Settings,
 ) -> Option<QuotientGraph> {
@@ -193,9 +196,8 @@ fn compute_quotient(
                 None
             }
         } else {
-            let descriptive = solve_mus(formula, &quotient_graph, graph, dict);
-
-            descriptive.unwrap().map(|_| quotient_graph)
+            let descriptive = solve_mus(formula, &quotient_graph, graph, dict).unwrap();
+            descriptive.map(|_| quotient_graph)
         }
     } else {
         eprintln!("Trivially descriptive");
@@ -211,7 +213,7 @@ fn main() -> Result<(), Error> {
 
     if let Some(eval_buf) = settings.evaluate {
         let logs = evaluate_log_file(&mut eval_buf.lines());
-        evaluate_logs(&logs);
+        evaluate_logs(logs);
         return Ok(());
     }
 
@@ -251,6 +253,13 @@ fn main() -> Result<(), Error> {
 
     // Sort the graph to allow easier lookup for edges.
     time!(graph_sort_time, _t, graph.sort());
+    do_if_some(&mut statistics, |stats| {
+        stats.log_graph_sorted(graph_sort_time)
+    });
+
+    if settings.gap_mode {
+        return gap_mode(&graph, generators, &mut statistics);
+    }
 
     // Apply a heuristic and find the "best" quotient according
     // to the chosen metric and print out the orbits for other
@@ -274,7 +283,7 @@ fn main() -> Result<(), Error> {
             orbits = generate_orbits(&mut generators);
         }
 
-        print_orbits_nauty_style(orbits, &statistics);
+        print_orbits_nauty_style(orbits, statistics.as_ref());
         return Ok(());
     }
 
@@ -299,7 +308,6 @@ fn main() -> Result<(), Error> {
 
     // ... iterate over the specified subsets of generators...
     if let Some(mut statistics) = statistics {
-        statistics.log_graph_sorted(graph_sort_time);
         // ... with statistics ...
         if settings.iter_powerset {
             generators

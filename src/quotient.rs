@@ -19,7 +19,6 @@ use crate::{
 };
 
 pub type Orbits = Vec<VertexIndex>;
-pub type Generator = Permutation<VertexIndex>;
 
 /// Call nauty with the given graph representation
 /// and compute the generators of the automorphism group
@@ -27,7 +26,7 @@ pub type Generator = Permutation<VertexIndex>;
 pub fn compute_generators_with_nauty(
     nauty_graph: Either<NautyGraph, SparseNautyGraph>,
     settings: &Settings,
-) -> Vec<Generator> {
+) -> Vec<Permutation> {
     let mut generators = Vec::new();
     let (n, m);
     let mut options;
@@ -112,7 +111,7 @@ pub fn compute_generators_with_nauty(
 pub fn compute_generators_with_traces(
     mut traces_graph: TracesGraph,
     settings: &Settings,
-) -> Vec<Generator> {
+) -> Vec<Permutation> {
     let n = traces_graph.vertex_order.len();
     let mut generators = Vec::new();
 
@@ -274,7 +273,7 @@ fn get_orbit(orbits: &[VertexIndex], vertex: VertexIndex) -> VertexIndex {
 }
 
 // Generate the orbits of a quotient graph from the generators of the original graph.
-pub fn generate_orbits(generators: &mut [Generator]) -> Orbits {
+pub fn generate_orbits(generators: &mut [Permutation]) -> Orbits {
     let number_of_vertices = generators
         .get(0)
         .expect("Empty subset can't be used to generate orbits")
@@ -526,7 +525,7 @@ mod test {
         // Test dense nauty
         let nauty_graph = NautyGraph::from_graph(&mut graph);
         assert!(nauty_graph.check_valid());
-        let expected_generators: Vec<Generator> = vec![
+        let expected_generators: Vec<Permutation> = vec![
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
             vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
         ];
@@ -535,7 +534,7 @@ mod test {
 
         // Test sparse nauty
         let sparse_nauty_graph = SparseNautyGraph::from_graph(&mut graph);
-        let expected_generators: Vec<Generator> = vec![
+        let expected_generators: Vec<Permutation> = vec![
             vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
         ];
@@ -545,11 +544,12 @@ mod test {
 
         // Test traces
         let traces_graph = TracesGraph::from_graph(&mut graph);
-        let expected_generators: Vec<Generator> = vec![
+        let expected_generators: Vec<Permutation> = vec![
             vec![7, 3, 2, 6, 4, 0, 1, 5].into(),
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
         ];
         let generators = compute_generators_with_traces(traces_graph, &settings);
+
         assert_eq!(expected_generators, generators);
 
         Ok(())

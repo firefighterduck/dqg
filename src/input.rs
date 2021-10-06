@@ -17,8 +17,6 @@ use crate::{
     Error, MetricUsed, NautyTraces, Settings,
 };
 
-const BIG_BUFFER: usize = 0x100000000;
-
 #[derive(StructOpt, Debug)]
 #[structopt(name = "DQG")]
 struct CommandLineOptions {
@@ -59,6 +57,11 @@ struct CommandLineOptions {
     /// transversals.
     #[structopt(short = "-v", long)]
     validate: bool,
+    /// Operate in GAP mode.
+    /// This means that DQG use GAP to
+    /// search in the conjugacy classes.
+    #[structopt(long)]
+    gap_mode: bool,
     /// GIve graph size for file formats
     /// which don't contain the graph size.
     #[structopt(short = "-n", long)]
@@ -172,7 +175,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
 
     if let Some(path_to_graph_file) = cl_options.input {
         // Either read the graph from a file ..
-        let file_buf = BufReader::with_capacity(BIG_BUFFER, File::open(&path_to_graph_file)?);
+        let file_buf = BufReader::new(File::open(&path_to_graph_file)?);
         let (parsed_graph, has_header) = match path_to_graph_file
             .as_path()
             .extension()
@@ -239,6 +242,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         nondescriptive_core: cl_options.nondescriptive_core,
         search_group: cl_options.search_group,
         validate: cl_options.validate,
+        gap_mode: cl_options.gap_mode,
         metric: cl_options.metric,
         evaluate: None,
         nauyt_or_traces: if use_traces {

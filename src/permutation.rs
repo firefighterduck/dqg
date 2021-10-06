@@ -3,45 +3,47 @@ use std::convert::TryInto;
 use itertools::Itertools;
 use num::Integer;
 
+use crate::graph::VertexIndex;
+
 #[derive(Debug)]
 pub struct IncompatiblePermutationSizes;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Permutation<T>
-where
-    T: TryInto<usize> + Clone + PartialEq + Default,
-    <T as TryInto<usize>>::Error: std::fmt::Debug,
-{
-    pub raw: Vec<T>,
-    cycles: Option<Vec<Vec<T>>>,
+#[derive(Debug, Clone, PartialOrd, Ord)]
+pub struct Permutation {
+    pub raw: Vec<VertexIndex>,
+    cycles: Option<Vec<Vec<VertexIndex>>>,
 }
 
-impl<T> Permutation<T>
-where
-    T: TryInto<usize> + Clone + PartialEq + Default,
-    <T as TryInto<usize>>::Error: std::fmt::Debug,
-{
+impl PartialEq for Permutation {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw.eq(&other.raw)
+    }
+}
+
+impl Eq for Permutation {}
+
+impl Permutation {
     /// Builds a new permutation from the given vector but doesn't
     /// compute the cycles explicitly.
-    pub fn new(raw: Vec<T>) -> Self {
+    pub fn new(raw: Vec<VertexIndex>) -> Self {
         Permutation { raw, cycles: None }
     }
 
     /// Builds a new permutation from the given vector and
     /// compute the cycles explicitly.
-    pub fn new_with_cycles(raw: Vec<T>) -> Self {
+    pub fn new_with_cycles(raw: Vec<VertexIndex>) -> Self {
         let mut new = Permutation { raw, cycles: None };
         new.compute_cycles();
         new
     }
 
     /// Builds a new permutation form the given cycles.
-    /// The cycles need to contain single element cycles as well.
-    pub fn _from_cycles(cycles: Vec<Vec<T>>, size: usize) -> Self {
-        let mut raw = vec![T::default(); size];
+    /// The cycles need not contain single element cycles as well.
+    pub fn from_cycles(cycles: Vec<Vec<VertexIndex>>, size: usize) -> Self {
+        let mut raw = (0..size as VertexIndex).collect_vec();
 
-        for cycle in cycles.iter() {
-            Self::_from_cycle(cycle, &mut raw);
+        for cycle in cycles.iter().filter(|cycle| cycle.len() > 1) {
+            Self::from_cycle(cycle, &mut raw);
         }
 
         let cycles = cycles.into_iter().filter(|cycle| cycle.len() > 1).collect();
@@ -83,9 +85,9 @@ where
         }
 
         for value in self.raw.iter_mut() {
-            let self_index: usize = value.clone().try_into().unwrap();
+            let self_index: usize = *value as usize;
             let subsequent_value = subsequent_perm.get(self_index).unwrap();
-            *value = subsequent_value.clone();
+            *value = *subsequent_value;
         }
 
         Ok(())
@@ -156,19 +158,19 @@ where
     }
 
     /// Evaluate the permutation for a single value.
-    pub fn _evaluate(&self, in_value: &T) -> Option<T> {
-        self.get(in_value.clone().try_into().unwrap()).map(T::clone)
+    pub fn _evaluate(&self, in_value: &VertexIndex) -> Option<VertexIndex> {
+        self.get(*in_value as usize).copied()
     }
 
     /// Apply the permutation to the given iterator.
-    pub fn _apply<I>(self, iterator: I) -> impl Iterator<Item = T>
+    pub fn _apply<I>(self, iterator: I) -> impl Iterator<Item = VertexIndex>
     where
-        I: Iterator<Item = T>,
+        I: Iterator<Item = VertexIndex>,
     {
-        iterator.map(move |value| self._evaluate(&value.clone()).unwrap_or(value))
+        iterator.map(move |value| self._evaluate(&value).unwrap_or(value))
     }
 
-    pub fn get_cycles(&mut self) -> Vec<Vec<T>> {
+    pub fn get_cycles(&mut self) -> Vec<Vec<VertexIndex>> {
         if self.cycles.is_none() {
             self.compute_cycles();
         }
@@ -176,38 +178,35 @@ where
         self.cycles.clone().unwrap()
     }
 
-    fn get(&self, index: usize) -> Option<&T> {
+    fn get(&self, index: usize) -> Option<&VertexIndex> {
         self.raw.get(index)
     }
 
-    fn _from_cycle(cycle: &[T], raw: &mut [T]) {
-        let first = cycle.get(0).unwrap().clone();
-        let mut last = first.clone();
+    fn from_cycle(cycle: &[VertexIndex], raw: &mut [VertexIndex]) {
+        let first = cycle.get(0).unwrap();
+        let mut last = first;
 
         for current in cycle[1..].iter() {
-            *raw.get_mut(last.try_into().unwrap()).unwrap() = current.clone();
-            last = current.clone();
+            *raw.get_mut(*last as usize).unwrap() = *current;
+            last = current;
         }
-        *raw.get_mut(last.try_into().unwrap()).unwrap() = first;
+        *raw.get_mut(*last as usize).unwrap() = *first;
     }
 
-    fn normalize_cycle(cycle: &mut [T]) {
-        let min_index = cycle
-            .iter()
-            .position_min_by_key(|&x| x.clone().try_into().unwrap())
-            .unwrap();
+    fn normalize_cycle(cycle: &mut [VertexIndex]) {
+        let min_index = cycle.iter().position_min_by_key(|&x| *x as usize).unwrap();
         cycle.rotate_left(min_index);
     }
 
-    fn get_cycle(&self, from: T) -> Vec<T> {
-        let mut cycle = vec![from.clone()];
+    fn get_cycle(&self, from: VertexIndex) -> Vec<VertexIndex> {
+        let mut cycle = vec![from];
 
-        let mut value = self.get(from.clone().try_into().unwrap()).unwrap();
+        let mut value = self.get(from as usize).unwrap();
 
         loop {
             if value != &from {
-                cycle.push(value.clone());
-                value = self.get(value.clone().try_into().unwrap()).unwrap();
+                cycle.push(*value);
+                value = self.get(*value as usize).unwrap();
             } else {
                 break;
             }
@@ -221,10 +220,12 @@ where
         let mut cycles = Vec::new();
 
         for (index, value) in self.raw.iter().enumerate() {
-            if index != value.clone().try_into().unwrap()
-                && !cycles.iter().any(|cycle: &Vec<T>| cycle.contains(value))
+            if index != *value as usize
+                && !cycles
+                    .iter()
+                    .any(|cycle: &Vec<VertexIndex>| cycle.contains(value))
             {
-                cycles.push(self.get_cycle(value.clone()));
+                cycles.push(self.get_cycle(*value));
             }
         }
 
@@ -232,13 +233,13 @@ where
     }
 }
 
-impl<T> From<Vec<T>> for Permutation<T>
+impl<T> From<Vec<T>> for Permutation
 where
-    T: TryInto<usize> + Clone + PartialEq + Default,
-    <T as TryInto<usize>>::Error: std::fmt::Debug,
+    T: TryInto<VertexIndex>,
+    <T as TryInto<VertexIndex>>::Error: std::fmt::Debug,
 {
     fn from(raw: Vec<T>) -> Self {
-        Permutation::new(raw)
+        Permutation::new(raw.into_iter().map(|t| t.try_into()).try_collect().unwrap())
     }
 }
 
@@ -251,7 +252,7 @@ mod test {
         let perm1 = vec![1usize, 2, 0].into();
         let perm2 = vec![2, 1, 0].into();
         let comp = Permutation::_compose(&perm1, &perm2).unwrap();
-        assert_eq!(Permutation::new(vec![0usize, 2, 1]), comp);
+        assert_eq!(Permutation::from(vec![0usize, 2, 1]), comp);
 
         let perm3 = vec![0, 1, 2, 3].into();
         let comp_error = Permutation::_compose(&perm1, &perm3);
@@ -261,9 +262,9 @@ mod test {
     #[test]
     fn compose_with_test() {
         let perm1 = vec![1usize, 2, 0].into();
-        let mut perm2: Permutation<usize> = vec![2, 1, 0].into();
+        let mut perm2: Permutation = vec![2, 1, 0].into();
         assert!(perm2._compose_with(&perm1).is_ok());
-        assert_eq!(Permutation::new(vec![0usize, 2, 1]), perm2);
+        assert_eq!(Permutation::from(vec![0usize, 2, 1]), perm2);
 
         let perm3 = vec![0, 1, 2, 3].into();
         let comp_error = perm2._compose_with(&perm3);
@@ -274,37 +275,37 @@ mod test {
     fn normalize_cycle_test() {
         let mut cycle = vec![3, 5, 4, 2];
         let normalized = vec![2, 3, 5, 4];
-        Permutation::<usize>::normalize_cycle(&mut cycle);
+        Permutation::normalize_cycle(&mut cycle);
         assert_eq!(normalized, cycle);
     }
 
     #[test]
     fn compute_cycles_test() {
-        let raw = vec![0usize, 1, 3, 2];
+        let raw = vec![0, 1, 3, 2];
         let mut perm = Permutation::new(raw.clone());
         perm.compute_cycles();
         assert_eq!(raw, perm.raw);
-        assert_eq!(vec![vec![2usize, 3]], perm.cycles.unwrap());
+        assert_eq!(vec![vec![2, 3]], perm.cycles.unwrap());
     }
 
     #[test]
     fn get_subgroup_size() {
-        let mut perm = Permutation::new_with_cycles(vec![4usize, 0, 1, 5, 7, 3, 2, 6]); //(0 4 7 6 2 1) (3 5)
+        let mut perm = Permutation::new_with_cycles(vec![4, 0, 1, 5, 7, 3, 2, 6]); //(0 4 7 6 2 1) (3 5)
         let subgroup_size = perm._get_order();
         assert_eq!(6, subgroup_size);
 
-        let mut perm2 = Permutation::new(vec![1usize, 2, 0, 4, 3]); // (0 1 2) (3 4)
+        let mut perm2 = Permutation::new(vec![1, 2, 0, 4, 3]); // (0 1 2) (3 4)
         let subgroup_size2 = perm2._get_order();
         assert_eq!(6, subgroup_size2);
 
-        let mut perm3 = Permutation::new(vec![1usize, 2, 0, 4, 3, 8, 5, 6, 7]); // (0 1 2) (3 4) (5 8 7 6)
+        let mut perm3 = Permutation::new(vec![1, 2, 0, 4, 3, 8, 5, 6, 7]); // (0 1 2) (3 4) (5 8 7 6)
         let subgroup_size3 = perm3._get_order();
         assert_eq!(12, subgroup_size3);
     }
 
     #[test]
     fn evaluate_test() {
-        let perm = Permutation::new(vec![0usize, 2, 1]);
+        let perm = Permutation::new(vec![0, 2, 1]);
         assert_eq!(0, perm._evaluate(&0).unwrap());
         assert_eq!(2, perm._evaluate(&1).unwrap());
         assert_eq!(1, perm._evaluate(&2).unwrap());
@@ -313,16 +314,16 @@ mod test {
 
     #[test]
     fn apply_test() {
-        let perm = Permutation::new(vec![4usize, 2, 1, 0, 3]);
-        let data = vec![0usize, 2, 3, 4, 5, 1];
-        let permuted_data: Vec<usize> = perm._apply(data.into_iter()).collect();
-        assert_eq!(vec![4usize, 1, 0, 3, 5, 2], permuted_data);
+        let perm = Permutation::new(vec![4, 2, 1, 0, 3]);
+        let data = vec![0, 2, 3, 4, 5, 1];
+        let permuted_data: Vec<i32> = perm._apply(data.into_iter()).collect();
+        assert_eq!(vec![4, 1, 0, 3, 5, 2], permuted_data);
     }
 
     #[test]
     fn from_cycles_test() {
-        let cycles = vec![vec![1u8, 2, 3], vec![0], vec![5, 6], vec![4]];
-        let perm = Permutation::_from_cycles(cycles, 7);
+        let cycles = vec![vec![1, 2, 3], vec![0], vec![5, 6], vec![4]];
+        let perm = Permutation::from_cycles(cycles, 7);
         let expected_perm = Permutation::new_with_cycles(vec![0, 2, 3, 1, 4, 6, 5]);
         assert_eq!(expected_perm, perm);
     }
