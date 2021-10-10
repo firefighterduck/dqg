@@ -128,6 +128,7 @@ pub fn solve_mus(
         if mus_out.status.code() == Some(20) {
             let core = parse_mus(&mus_out.stdout)?;
             let core_orbits = get_core_orbits_indexed(&core, &formula_arc, dict);
+            dbg!(&core_orbits);
             let sub_quotient = quotient_graph.induced_subquotient(&core_orbits)?;
 
             // Make sure that the found orbits are in fact a non-descriptive core.

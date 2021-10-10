@@ -119,7 +119,7 @@ fn parse_continue_after_edge_line(input: Input<'_>) -> ParseResult<'_, bool> {
 /// `f=[c11,c12.c13,...c1n|c21,c22,...c2m|...|cp1,cp2,...,cpk]`
 /// Not specified vertices stay in colour DEFAULT_COLOR.
 /// Also checks, that there is nothing of relevance after the colouring.
-fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<Colour>> {
+fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, (Vec<Colour>, Colour)> {
     use nom::{
         bytes::complete::tag,
         character::complete::{multispace1, space0},
@@ -147,7 +147,7 @@ fn parse_colouring(graph_size: usize, input: Input<'_>) -> ParseResult<'_, Vec<C
         colour_counter += 1;
     }
 
-    Ok((rest, colours))
+    Ok((rest, (colours, colour_counter)))
 }
 
 pub fn parse_dreadnaut_input<B: BufRead>(input: B) -> Result<(Graph, bool), Error> {
@@ -178,7 +178,9 @@ pub fn parse_dreadnaut_input<B: BufRead>(input: B) -> Result<(Graph, bool), Erro
 
     get_line!(color_line, lines);
     parse_single_line!(colours, parse_colouring(graph_size, &color_line));
+    let (colours, max_colour) = colours;
     graph.set_colours(&colours)?;
+    graph.update_max_color(max_colour);
 
     Ok((graph, header))
 }
@@ -262,7 +264,8 @@ mod test {
     #[test]
     fn test_parse_colouring() -> Result<(), Error> {
         let test_input = "f=[1|  0  ,  3 | 2] x o\n\n";
-        let (_, parsed_colours) = parse_colouring(5, test_input)?;
+        let (_, (parsed_colours, max_colour)) = parse_colouring(5, test_input)?;
+        assert_eq!(4, max_colour);
         assert_eq!(vec![2, 1, 3, 2, DEFAULT_COLOR], parsed_colours);
 
         Ok(())
@@ -288,6 +291,7 @@ f=[0|1, 2] x o
         expected_graph.add_edge(2, 3)?;
         expected_graph.add_edge(3, 0)?;
         expected_graph.set_colours(&vec![1, 2, 2, DEFAULT_COLOR])?;
+        expected_graph.update_max_color(3);
 
         let (parsed_graph, has_header) = parse_dreadnaut_input(test_buf)?;
         assert_eq!(expected_graph, parsed_graph);
@@ -312,6 +316,7 @@ f=[0|1, 2]
         expected_graph.add_edge(2, 3)?;
         expected_graph.add_edge(3, 0)?;
         expected_graph.set_colours(&vec![1, 2, 2, DEFAULT_COLOR])?;
+        expected_graph.update_max_color(3);
 
         let (parsed_graph, has_header) = parse_dreadnaut_input(test_buf)?;
         assert_eq!(expected_graph, parsed_graph);

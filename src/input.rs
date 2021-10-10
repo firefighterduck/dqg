@@ -26,10 +26,9 @@ struct CommandLineOptions {
     /// Read a file from command line.
     #[structopt(short = "-m", long)]
     read_memory_pipe: bool,
-    /// Stops after computing the orbits and
-    /// outputs these in a nauty-like fashion.
+    /// Outputs orbits in dreadnaut format.
     #[structopt(short = "-o", long)]
-    orbits_only: bool,
+    output_orbits: bool,
     /// Logs all orbit sizes in a HashMap.
     #[structopt(short = "-l", long)]
     log_orbits: bool,
@@ -235,7 +234,7 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
 
     let settings = Settings {
         iter_powerset: cl_options.iter_powerset,
-        orbits_only: cl_options.orbits_only,
+        output_orbits: cl_options.output_orbits,
         log_orbits: cl_options.log_orbits,
         print_formula: cl_options.print_formula,
         colored_graph: cl_options.colored_graph,

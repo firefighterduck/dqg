@@ -115,12 +115,7 @@ impl TracesGraph {
 
         // Encode graph. Vertices must be ordered with increasing indices.
         let mut edge_counter = 0usize;
-        for (index, vertex) in graph
-            .vertices
-            .iter()
-            .sorted_by(|a, b| a.index.cmp(&b.index))
-            .enumerate()
-        {
+        for (index, vertex) in graph.vertices.iter().sorted().enumerate() {
             debug_assert_eq!(index as i32, vertex.index);
             traces_graph.sparse_graph.d[index] = vertex.edges_to.len().try_into().unwrap();
             traces_graph.sparse_graph.v[index] = edge_counter.try_into().unwrap();

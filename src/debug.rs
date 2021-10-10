@@ -217,7 +217,7 @@ pub fn print_generator(mut generator: Permutation) {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn print_dot(quotient_encoding: QuotientGraphEncoding, graph: &Graph) -> Result<(), Error> {
+pub fn _print_dot(quotient_encoding: QuotientGraphEncoding, graph: &Graph) -> Result<(), Error> {
     println!("graph graphname {{");
 
     let colors = vec!["red", "green", "blue", "black", "yellow", "orange"]; // I don't expect to print more than 4 orbits at a time with one color per orbit.

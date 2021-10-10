@@ -88,8 +88,8 @@ impl Default for MetricUsed {
 pub struct Settings {
     /// Iterate the whole powerset.
     pub iter_powerset: bool,
-    /// Compute only orbits.
-    pub orbits_only: bool,
+    /// Outputs orbits in dreadnaut format.
+    pub output_orbits: bool,
     /// Log orbit sizes.
     pub log_orbits: bool,
     /// Print formula instead of solving it.

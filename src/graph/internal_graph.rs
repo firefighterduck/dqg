@@ -20,6 +20,7 @@ pub struct Graph {
     edge_number: usize,
     #[debug(skip)]
     pub state: GraphState,
+    max_color: Colour,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +46,13 @@ impl Graph {
         self.edge_number < self.size * (self.size - 1) / 4
     }
 
+    #[inline]
+    pub fn update_max_color(&mut self, color: Colour) {
+        if color > self.max_color {
+            self.max_color = color;
+        }
+    }
+
     pub fn new_ordered(n: usize) -> Self {
         let mut vertices = Vec::with_capacity(n);
         for index in 0..n {
@@ -55,6 +63,7 @@ impl Graph {
             size: n,
             edge_number: 0,
             state: GraphState::IndexOrdered,
+            max_color: -1,
         }
     }
 
@@ -72,11 +81,13 @@ impl Graph {
             } else {
                 GraphState::Chaos
             },
+            max_color: -1,
         }
     }
 
     pub fn set_vertex(&mut self, new_vertex: Vertex) -> Result<(), GraphError> {
         use GraphState::*;
+        self.update_max_color(new_vertex.colour);
         let index = new_vertex.index;
         if self.state == IndexOrdered {
             *self
@@ -258,6 +269,14 @@ impl Graph {
         subgraph.edge_number = sub_edge_number;
 
         Ok(subgraph)
+    }
+
+    pub fn recolor(&mut self, vertex: VertexIndex) -> Result<(), GraphError> {
+        let next_color = self.max_color;
+        self.max_color = next_color + 1;
+        let vertex = self.get_vertex_mut(vertex)?;
+        vertex.colour = next_color;
+        Ok(())
     }
 }
 

@@ -24,7 +24,7 @@ pub enum PlanResult {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum QuotientResult {
     QuotientConcretePlans(PlanResult, PlanResult),
-    NoSymmetry,
+    NoActionSymmetry,
     Nondescriptive,
     TimedOut,
 }
@@ -142,7 +142,7 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
             .next_if(|line| line.as_ref().unwrap() == "No symmetries found, exiting!!")
             .is_some()
         {
-            quotient_result = QuotientResult::NoSymmetry;
+            quotient_result = QuotientResult::NoActionSymmetry;
             break;
         } else if peekable
             .next_if(|line| line.as_ref().unwrap() == "No covering instantiations, exiting!!")
@@ -430,7 +430,7 @@ No symmetries found, exiting!!";
         let expected_log = Some(Log {
             metric: MetricUsed::BiggestOrbits,
             default_result: PlanResult::ValidPlan(5),
-            quotient_result: QuotientResult::NoSymmetry,
+            quotient_result: QuotientResult::NoActionSymmetry,
             tool_stats: TEST_STATS,
         });
         assert_eq!(expected_log, log);

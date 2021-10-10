@@ -5,19 +5,18 @@
 //! descriptive quotients of graphs
 //! for certain conditions.
 
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use std::{io::BufRead, time::Instant};
 
 mod graph;
-use graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph};
+use graph::{Graph, NautyGraph};
 
 mod input;
 use input::read_graph;
 
 mod quotient;
 use quotient::{
-    compute_generators_with_nauty, compute_generators_with_traces, empty_orbits, generate_orbits,
-    search_group, Orbits, QuotientGraph,
+    compute_generators, empty_orbits, generate_orbits, search_group, Orbits, QuotientGraph,
 };
 
 mod encoding;
@@ -33,7 +32,7 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_dot, print_formula, print_orbits_nauty_style};
+use debug::{print_formula, print_orbits_nauty_style};
 
 mod permutation;
 use permutation::Permutation;
@@ -51,6 +50,9 @@ use evaluate::{evaluate_log_file, evaluate_logs};
 
 mod gap;
 use gap::gap_mode;
+
+mod core;
+use crate::core::search_with_core;
 
 #[cfg(not(tarpaulin_include))]
 fn compute_quotient_with_statistics(
@@ -217,7 +219,10 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let mut generators;
+    // Search for a non descriptive core in a single non-descriptive quotient.
+    if settings.nondescriptive_core {
+        return search_with_core(&mut graph, &settings);
+    }
 
     if settings.search_group {
         let nauty_graph = NautyGraph::from_graph(&mut graph);
@@ -228,23 +233,7 @@ fn main() -> Result<(), Error> {
     }
 
     // ... compute the generators with nauty or Traces. Then ...
-    match settings.nauyt_or_traces {
-        NautyTraces::Nauty => {
-            let nauty_graph = NautyGraph::from_graph(&mut graph);
-
-            assert!(nauty_graph.check_valid());
-            generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
-        }
-        NautyTraces::SparseNauty => {
-            let sparse_nauty_graph = SparseNautyGraph::from_graph(&mut graph);
-            generators =
-                compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
-        }
-        NautyTraces::Traces => {
-            let traces_graph = TracesGraph::from_graph(&mut graph);
-            generators = compute_generators_with_traces(traces_graph, &settings);
-        }
-    };
+    let mut generators = compute_generators(&mut graph, &settings);
 
     do_if_some(&mut statistics, Statistics::log_nauty_done);
     do_if_some(&mut statistics, |st| {
@@ -264,7 +253,7 @@ fn main() -> Result<(), Error> {
     // Apply a heuristic and find the "best" quotient according
     // to the chosen metric and print out the orbits for other
     // tools to directly use them.
-    if settings.orbits_only {
+    if settings.output_orbits {
         let orbits: Orbits;
 
         if generators.is_empty() {
@@ -285,25 +274,6 @@ fn main() -> Result<(), Error> {
 
         print_orbits_nauty_style(orbits, statistics.as_ref());
         return Ok(());
-    }
-
-    // Search for a non descriptive core in a single non-descriptive quotient.
-    if settings.nondescriptive_core {
-        let orbits = generate_orbits(&mut generators);
-        let quotient_graph = QuotientGraph::from_graph_orbits(&graph, orbits);
-        let formula = encode_problem(&quotient_graph, &graph);
-
-        let core = if let Some((formula, _)) = formula {
-            if let Ok(false) = solve(formula) {
-                quotient_graph.search_non_descriptive_core(&graph)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-        .expect("Nondescriptive core can only be found for nondescriptive generator subsets!");
-        return print_dot(core, &graph);
     }
 
     // ... iterate over the specified subsets of generators...

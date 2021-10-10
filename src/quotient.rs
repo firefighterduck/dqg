@@ -15,7 +15,7 @@ use crate::{
     encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     permutation::Permutation,
-    Error, Settings,
+    Error, NautyTraces, Settings,
 };
 
 pub type Orbits = Vec<VertexIndex>;
@@ -157,6 +157,25 @@ pub fn compute_generators_with_traces(
     }
 
     generators
+}
+
+pub fn compute_generators(graph: &mut Graph, settings: &Settings) -> Vec<Permutation> {
+    match settings.nauyt_or_traces {
+        NautyTraces::Nauty => {
+            let nauty_graph = NautyGraph::from_graph(graph);
+
+            debug_assert!(nauty_graph.check_valid());
+            compute_generators_with_nauty(Either::Left(nauty_graph), settings)
+        }
+        NautyTraces::SparseNauty => {
+            let sparse_nauty_graph = SparseNautyGraph::from_graph(graph);
+            compute_generators_with_nauty(Either::Right(sparse_nauty_graph), settings)
+        }
+        NautyTraces::Traces => {
+            let traces_graph = TracesGraph::from_graph(graph);
+            compute_generators_with_traces(traces_graph, settings)
+        }
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
