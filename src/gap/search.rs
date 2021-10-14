@@ -5,7 +5,7 @@ use crate::{
     graph::Graph,
     graph::VertexIndex,
     permutation::Permutation,
-    quotient::{generate_orbits, Orbits, QuotientGraph},
+    quotient::{generate_orbits, QuotientGraph},
     sat_solving::solve,
     statistics::{QuotientStatistics, Statistics},
     time, Error,
@@ -26,7 +26,7 @@ pub fn check_class_stats(
     graph: &Graph,
     representative_group: &mut [Permutation],
     statistics: &mut Statistics,
-) -> Result<Option<Orbits>, Error> {
+) -> Result<bool, Error> {
     let start_time = Instant::now();
 
     time!(
@@ -57,11 +57,7 @@ pub fn check_class_stats(
         }
     );
 
-    let result = if matches!(descriptive, Ok(true)) {
-        Some(quotient.orbits)
-    } else {
-        None
-    };
+    let result = matches!(descriptive, Ok(true));
 
     let quotient_stats = QuotientStatistics {
         quotient_size,
@@ -78,6 +74,7 @@ pub fn check_class_stats(
         orbit_sizes: Default::default(),
     };
     statistics.log_quotient_statistic(quotient_stats);
+    statistics.log_iteration();
 
     Ok(result)
 }

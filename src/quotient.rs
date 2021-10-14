@@ -12,6 +12,7 @@ use std::{os::raw::c_int, slice::from_raw_parts, usize};
 
 use crate::{
     debug::print_generator,
+    do_if_some,
     encoding::QuotientGraphEncoding,
     graph::{Graph, NautyGraph, SparseNautyGraph, TracesGraph, Vertex, VertexIndex, DEFAULT_COLOR},
     permutation::Permutation,
@@ -25,7 +26,7 @@ pub type Orbits = Vec<VertexIndex>;
 /// for the graph. Return the generators.
 pub fn compute_generators_with_nauty(
     nauty_graph: Either<NautyGraph, SparseNautyGraph>,
-    settings: &Settings,
+    settings: &mut Settings,
 ) -> Vec<Permutation> {
     let mut generators = Vec::new();
     let (n, m);
@@ -102,6 +103,10 @@ pub fn compute_generators_with_nauty(
         }
     }
 
+    do_if_some(settings.get_stats(), |statsistics| {
+        statsistics.log_group_size(stats.grpsize1, stats.grpsize2)
+    });
+
     generators
 }
 
@@ -110,7 +115,7 @@ pub fn compute_generators_with_nauty(
 /// for the graph. Return the generators.
 pub fn compute_generators_with_traces(
     mut traces_graph: TracesGraph,
-    settings: &Settings,
+    settings: &mut Settings,
 ) -> Vec<Permutation> {
     let n = traces_graph.vertex_order.len();
     let mut generators = Vec::new();
@@ -154,12 +159,16 @@ pub fn compute_generators_with_traces(
                 std::ptr::null_mut(),
             );
         }
+
+        do_if_some(settings.get_stats(), |statsistics| {
+            statsistics.log_group_size(stats.grpsize1, stats.grpsize2)
+        });
     }
 
     generators
 }
 
-pub fn compute_generators(graph: &mut Graph, settings: &Settings) -> Vec<Permutation> {
+pub fn compute_generators(graph: &mut Graph, settings: &mut Settings) -> Vec<Permutation> {
     match settings.nauyt_or_traces {
         NautyTraces::Nauty => {
             let nauty_graph = NautyGraph::from_graph(graph);
@@ -179,7 +188,7 @@ pub fn compute_generators(graph: &mut Graph, settings: &Settings) -> Vec<Permuta
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &Settings) {
+pub fn search_group(graph: &mut Graph, mut nauty_graph: NautyGraph, settings: &mut Settings) {
     let generators = compute_generators_with_nauty(Either::Left(nauty_graph.clone()), settings);
 
     for generator in generators {
@@ -517,7 +526,7 @@ mod test {
 
     #[test]
     fn test_compute_generators_with_dense_nauty() -> Result<(), GraphError> {
-        let settings = Settings {
+        let mut settings = Settings {
             colored_graph: true,
             ..Default::default()
         };
@@ -548,7 +557,7 @@ mod test {
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
             vec![0, 3, 2, 1, 4, 7, 6, 5].into(),
         ];
-        let generators = compute_generators_with_nauty(Either::Left(nauty_graph), &settings);
+        let generators = compute_generators_with_nauty(Either::Left(nauty_graph), &mut settings);
         assert_eq!(expected_generators, generators);
 
         // Test sparse nauty
@@ -558,7 +567,7 @@ mod test {
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
         ];
         let generators =
-            compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &settings);
+            compute_generators_with_nauty(Either::Right(sparse_nauty_graph), &mut settings);
         assert_eq!(expected_generators, generators);
 
         // Test traces
@@ -567,7 +576,7 @@ mod test {
             vec![7, 3, 2, 6, 4, 0, 1, 5].into(),
             vec![5, 1, 2, 6, 4, 0, 3, 7].into(),
         ];
-        let generators = compute_generators_with_traces(traces_graph, &settings);
+        let generators = compute_generators_with_traces(traces_graph, &mut settings);
 
         assert_eq!(expected_generators, generators);
 

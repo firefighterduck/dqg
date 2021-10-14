@@ -80,6 +80,7 @@ pub struct Statistics {
     level: StatisticsLevel,
     #[debug(skip)]
     out_file: PathBuf,
+    pub exhausted: bool,
     // Timings
     #[debug(skip)]
     pub start_time: Instant,
@@ -93,11 +94,13 @@ pub struct Statistics {
     graph_sort_time: Option<Duration>,
     // Graph statistics
     graph_size: usize,
+    group_size: f64,
+    iteration_counter: usize,
+    descriptive_found: bool,
     #[debug(with = "opt_fmt")]
     number_of_generators: Option<usize>,
     max_orbit_size: usize,
     max_quotient_graph_size: usize,
-    number_of_descriptive: usize,
     #[debug(with = "opt_fmt")]
     max_quotient_handling_time: Option<Duration>,
     #[debug(with = "opt_fmt")]
@@ -114,15 +117,18 @@ impl Statistics {
             level,
             out_file,
             start_time: Instant::now(),
+            exhausted: false,
             nauty_done_time: None,
             gap_done_time: None,
             end_time: None,
             graph_sort_time: None,
             graph_size,
+            group_size: 0.,
+            iteration_counter: 0,
+            descriptive_found: false,
             number_of_generators: None,
             max_orbit_size: 0,
             max_quotient_graph_size: 0,
-            number_of_descriptive: 0,
             max_quotient_handling_time: None,
             max_kissat_time: None,
             quotient_statistics: Vec::new(),
@@ -130,8 +136,25 @@ impl Statistics {
     }
 
     #[cfg(not(tarpaulin_include))]
+    pub fn log_iteration(&mut self) {
+        self.iteration_counter += 1;
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_group_size(&mut self, base: f64, mantisse: i32) {
+        use num::traits::Pow;
+
+        self.group_size = base * 10f64.pow(mantisse);
+    }
+
+    #[cfg(not(tarpaulin_include))]
     pub fn log_nauty_done(&mut self) {
         self.nauty_done_time = Some(self.start_time.elapsed());
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_nauty_step(&mut self, duration: Duration) {
+        Self::add_option_duration(&mut self.nauty_done_time, duration);
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -142,6 +165,11 @@ impl Statistics {
     #[cfg(not(tarpaulin_include))]
     pub fn log_graph_sorted(&mut self, duration: Duration) {
         self.graph_sort_time = Some(duration);
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn log_graph_sorted_step(&mut self, duration: Duration) {
+        Self::add_option_duration(&mut self.graph_sort_time, duration);
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -156,16 +184,11 @@ impl Statistics {
 
     #[cfg(not(tarpaulin_include))]
     pub fn log_quotient_statistic(&mut self, quotient_statistic: QuotientStatistics) {
+        self.descriptive_found |= matches!(quotient_statistic.descriptive, Ok(true));
         self.max_orbit_size = self.max_orbit_size.max(quotient_statistic.max_orbit_size);
         self.max_quotient_graph_size = self
             .max_quotient_graph_size
             .max(quotient_statistic.quotient_size);
-        self.number_of_descriptive += if *quotient_statistic.descriptive.as_ref().unwrap_or(&false)
-        {
-            1
-        } else {
-            0
-        };
         self.max_quotient_handling_time = if let Some(qh_time) = self.max_quotient_handling_time {
             Some(qh_time.max(quotient_statistic.quotient_handling_time))
         } else {
@@ -179,6 +202,14 @@ impl Statistics {
 
         if self.level == StatisticsLevel::Full {
             self.quotient_statistics.push(quotient_statistic);
+        }
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    fn add_option_duration(old: &mut Option<Duration>, new: Duration) {
+        match old {
+            Some(old) => *old += new,
+            None => *old = Some(new),
         }
     }
 

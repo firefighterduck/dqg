@@ -6,7 +6,7 @@ pub type BinInput<'a> = &'a [u8];
 pub type BinParseError<'a> = nom::error::VerboseError<BinInput<'a>>;
 pub type BinParseResult<'a, O> = nom::IResult<BinInput<'a>, O, BinParseError<'a>>;
 
-fn parse_comment(input: BinInput<'_>) -> BinParseResult<'_, ()> {
+fn _parse_comment(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     use nom::{
         character::complete::{char, line_ending, not_line_ending},
         combinator::value,
@@ -24,7 +24,7 @@ fn parse_comment(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     )(input)
 }
 
-fn parse_unsat(input: BinInput<'_>) -> BinParseResult<'_, ()> {
+fn _parse_unsat(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     use nom::{
         bytes::complete::tag, character::complete::line_ending, combinator::value, error::context,
         sequence::pair,
@@ -36,7 +36,7 @@ fn parse_unsat(input: BinInput<'_>) -> BinParseResult<'_, ()> {
     )(input)
 }
 
-fn parse_clause_number(input: BinInput<'_>) -> BinParseResult<'_, usize> {
+fn _parse_clause_number(input: BinInput<'_>) -> BinParseResult<'_, usize> {
     use nom::{
         bytes::complete::tag,
         character::complete::{line_ending, u64},
@@ -55,7 +55,7 @@ fn parse_clause_number(input: BinInput<'_>) -> BinParseResult<'_, usize> {
 }
 
 /// Parse output of picomus and return core as clause indices.
-pub fn parse_mus(input: BinInput<'_>) -> Result<Vec<usize>, Error> {
+pub fn _parse_mus(input: BinInput<'_>) -> Result<Vec<usize>, Error> {
     use nom::{
         branch::alt,
         combinator::eof,
@@ -63,13 +63,13 @@ pub fn parse_mus(input: BinInput<'_>) -> Result<Vec<usize>, Error> {
         multi::{fold_many0, many1},
     };
 
-    let uninteresting = alt((parse_comment, parse_unsat));
+    let uninteresting = alt((_parse_comment, _parse_unsat));
     let mut skip = context(
         "Comment and UNSAT lines",
         fold_many0(uninteresting, || (), |_, _| ()),
     );
 
-    let mut core_clauses = context("Clauses in core", many1(parse_clause_number));
+    let mut core_clauses = context("Clauses in core", many1(_parse_clause_number));
 
     let (res, _) = skip(input)?;
     let (res, mut core) = core_clauses(res)?;
@@ -92,7 +92,7 @@ mod test {
     fn test_parse_comment() -> Result<(), Error> {
         let comment = b"c whatever is written here, I don't really care lul \n";
 
-        parse_comment(comment)?;
+        _parse_comment(comment)?;
 
         Ok(())
     }
@@ -101,7 +101,7 @@ mod test {
     fn test_parse_unsat() -> Result<(), Error> {
         let unsat = b"s UNSATISFIABLE\n";
 
-        parse_unsat(unsat)?;
+        _parse_unsat(unsat)?;
 
         Ok(())
     }
@@ -110,12 +110,12 @@ mod test {
     fn test_parse_clause_number() -> Result<(), Error> {
         let clause = b"v 131\n";
 
-        let (_, clause_number) = parse_clause_number(clause)?;
+        let (_, clause_number) = _parse_clause_number(clause)?;
         assert_eq!(131, clause_number);
 
         let clause = b"v 0\n";
 
-        let (_, clause_number) = parse_clause_number(clause)?;
+        let (_, clause_number) = _parse_clause_number(clause)?;
         assert_eq!(0, clause_number);
 
         Ok(())
@@ -146,7 +146,7 @@ v 734
 v 0
 ";
 
-        let clauses = parse_mus(mus)?;
+        let clauses = _parse_mus(mus)?;
         let expected_clauses = vec![
             20, 36, 80, 96, 156, 158, 168, 170, 650, 652, 669, 671, 680, 700, 707, 725, 734,
         ];

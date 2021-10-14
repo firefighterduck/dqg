@@ -66,20 +66,17 @@ pub fn gap_mode(
 #[cfg(not(tarpaulin_include))]
 fn gap_mode_statistics(
     graph: &Graph,
-    mut generators: Vec<Permutation>,
+    generators: Vec<Permutation>,
     statistics: &mut Statistics,
 ) -> Result<(), Error> {
-    // Early exit if full quotient is descriptive.
-    if let Some(orbits) = check_class_stats(graph, &mut generators, statistics)? {
-        print_orbits_nauty_style(orbits, Some(statistics));
-    } else {
+    if !generators.is_empty() {
         write_gap_input(generators)?;
         let before_gap_time = Instant::now();
 
         let gap = Command::new("gap")
             .arg("-b")
             .arg("-o")
-            .arg("16G")
+            .arg("4G")
             .arg("--nointeract")
             .arg(GAP_IN_FILE)
             .stdout(Stdio::piped())
@@ -91,14 +88,15 @@ fn gap_mode_statistics(
         if gap_out.status.success() {
             let representatives = parse_representatives(&gap_out.stdout, graph.size())?;
             for mut representative in representatives {
-                if let Some(orbits) = check_class_stats(graph, &mut representative, statistics)? {
-                    print_orbits_nauty_style(orbits, Some(statistics));
+                if check_class_stats(graph, &mut representative, statistics)? {
+                    //print_orbits_nauty_style(orbits, Some(statistics));
                     break;
                 }
             }
         }
     }
 
+    statistics.exhausted = true;
     statistics.log_end();
     statistics.save_statistics()
 }

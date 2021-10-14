@@ -1,12 +1,14 @@
 use std::{fs::File, io::BufReader, str::FromStr};
 
 use crate::debug::MetricError;
+use crate::statistics::Statistics;
 use crate::{
     metric::{BiggestOrbits, LeastOrbits, Metric, Sparsity},
     quotient::QuotientGraph,
 };
 
 #[cfg(not(tarpaulin_include))]
+#[inline]
 pub fn do_if_some<F, T>(optional: &mut Option<T>, f: F)
 where
     F: FnOnce(&mut T),
@@ -84,6 +86,27 @@ impl Default for MetricUsed {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum CoreMetric {
+    Recolor,
+    PowerGenerators,
+    MergeGenerators,
+}
+
+impl FromStr for CoreMetric {
+    type Err = MetricError;
+
+    #[cfg(not(tarpaulin_include))]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "recolor" => Ok(Self::Recolor),
+            "pow_gen" => Ok(Self::PowerGenerators),
+            "merge_gen" => Ok(Self::MergeGenerators),
+            _ => Err(MetricError(s.to_string())),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Settings {
     /// Iterate the whole powerset.
@@ -99,7 +122,7 @@ pub struct Settings {
     pub colored_graph: bool,
     /// Search for the smallest non-descriptive quotient
     /// core in the first non-descriptive quotient graph.
-    pub nondescriptive_core: bool,
+    pub nondescriptive_core: Option<CoreMetric>,
     /// Search in the whole automorphism group instead
     /// of a set of generators.
     pub search_group: bool,
@@ -119,4 +142,12 @@ pub struct Settings {
     pub evaluate: Option<BufReader<File>>,
     ///  Call nauty or traces.
     pub nauyt_or_traces: NautyTraces,
+    /// Statistics object if used
+    pub statistics: Option<Statistics>,
+}
+
+impl Settings {
+    pub fn get_stats(&mut self) -> &mut Option<Statistics> {
+        &mut self.statistics
+    }
 }

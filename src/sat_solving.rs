@@ -17,7 +17,7 @@ use crate::{
         encode_problem, Clause, HighLevelEncoding, QuotientGraphEncoding, SATEncodingDictionary,
     },
     graph::{Graph, VertexIndex},
-    parser::parse_mus,
+    parser::_parse_mus,
     quotient::QuotientGraph,
     Error,
 };
@@ -55,7 +55,7 @@ pub fn solve_validate(
     Ok(assignment.map(|assignment| get_transversal(assignment, dict)))
 }
 
-fn get_core_orbits_indexed(
+fn _get_core_orbits_indexed(
     clause_indices: &[usize],
     formula: &[Clause],
     dict: SATEncodingDictionary,
@@ -98,7 +98,7 @@ fn get_core_orbits(core_formula: &[Clause], dict: SATEncodingDictionary) -> Vec<
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn solve_mus(
+pub fn _solve_mus(
     formula: impl Iterator<Item = Clause>,
     quotient_graph: &QuotientGraph,
     graph: &Graph,
@@ -126,8 +126,8 @@ pub fn solve_mus(
 
         // 20 for Unsatisfiable
         if mus_out.status.code() == Some(20) {
-            let core = parse_mus(&mus_out.stdout)?;
-            let core_orbits = get_core_orbits_indexed(&core, &formula_arc, dict);
+            let core = _parse_mus(&mus_out.stdout)?;
+            let core_orbits = _get_core_orbits_indexed(&core, &formula_arc, dict);
             dbg!(&core_orbits);
             let sub_quotient = quotient_graph.induced_subquotient(&core_orbits)?;
 
@@ -273,7 +273,7 @@ mod test {
 
         assert_eq!(
             expected_orbits,
-            get_core_orbits_indexed(&core, &formula, dict)
+            _get_core_orbits_indexed(&core, &formula, dict)
         );
     }
 }

@@ -6,7 +6,10 @@
 //! for certain conditions.
 
 use itertools::Itertools;
-use std::{io::BufRead, time::Instant};
+use std::{
+    io::BufRead,
+    time::{Duration, Instant},
+};
 
 mod graph;
 use graph::{Graph, NautyGraph};
@@ -15,15 +18,13 @@ mod input;
 use input::read_graph;
 
 mod quotient;
-use quotient::{
-    compute_generators, empty_orbits, generate_orbits, search_group, Orbits, QuotientGraph,
-};
+use quotient::{compute_generators, generate_orbits, search_group, QuotientGraph};
 
 mod encoding;
 use encoding::{encode_problem, HighLevelEncoding};
 
 mod sat_solving;
-use sat_solving::{solve, solve_mus, solve_mus_kitten, solve_validate};
+use sat_solving::{solve, solve_validate};
 
 mod parser;
 
@@ -32,7 +33,6 @@ use statistics::{OrbitStatistics, QuotientStatistics, Statistics};
 
 mod debug;
 pub use debug::Error;
-use debug::{print_formula, print_orbits_nauty_style};
 
 mod permutation;
 use permutation::Permutation;
@@ -58,9 +58,8 @@ use crate::core::search_with_core;
 fn compute_quotient_with_statistics(
     generators_subset: &mut [Permutation],
     graph: &Graph,
-    settings: &Settings,
-    statistics: &mut Statistics,
-) -> Option<QuotientGraph> {
+    settings: &mut Settings,
+) -> bool {
     let start_time = Instant::now();
 
     time!(orbit_gen_time, orbits, generate_orbits(generators_subset));
@@ -78,28 +77,20 @@ fn compute_quotient_with_statistics(
         QuotientGraph::from_graph_orbits(graph, orbits)
     );
     let quotient_size = quotient_graph.quotient_graph.size();
-
-    time!(
-        _log_orbit_time,
-        min_max_orbit_size,
-        quotient_graph.get_orbit_sizes()
-    );
-    let (min_orbit_size, max_orbit_size) = min_max_orbit_size;
+    let (min_orbit_size, max_orbit_size) = quotient_graph.get_orbit_sizes();
 
     time!(
         encoding_time,
-        formula,
+        encoded,
         encode_problem(&quotient_graph, graph)
     );
-    let mut core_size = None;
 
-    if let Some((formula, dict)) = formula {
-        if settings.print_formula {
-            print_formula(formula);
-            return None;
-        }
+    let mut descriptive = Ok(true);
+    let mut validated = None;
+    let mut kissat_time = Duration::ZERO;
 
-        time!(kissat_time, descriptive_validated, {
+    let return_val = if let Some((formula, dict)) = encoded {
+        time!(k_time, descriptive_validated, {
             if settings.validate {
                 let sat_result = solve_validate(formula, dict);
                 match sat_result {
@@ -120,51 +111,41 @@ fn compute_quotient_with_statistics(
                     Err(err) => (Err(err), None),
                 }
             } else {
-                let descriptive = solve_mus_kitten(formula, &quotient_graph, graph, dict);
-                (
-                    descriptive.map(|core| {
-                        if let Some(core) = core {
-                            core_size = Some(core.1.len());
-                            false
-                        } else {
-                            true
-                        }
-                    }),
-                    None,
-                )
+                let descriptive = solve(formula);
+                (descriptive, None)
             }
         });
-        let (descriptive, validated) = descriptive_validated;
+        kissat_time = k_time;
+        descriptive = descriptive_validated.0;
+        validated = descriptive_validated.1;
 
-        let return_val = if let Ok(true) = descriptive {
-            Some(quotient_graph)
-        } else {
-            None
-        };
-
-        let quotient_handling_time = start_time.elapsed();
-        let quotient_stats = QuotientStatistics {
-            quotient_size,
-            core_size,
-            max_orbit_size,
-            min_orbit_size,
-            descriptive,
-            validated,
-            quotient_handling_time,
-            kissat_time,
-            orbit_gen_time,
-            quotient_gen_time,
-            encoding_time,
-            orbit_sizes,
-        };
-        statistics.log_quotient_statistic(quotient_stats);
-
-        return_val
+        matches!(descriptive, Ok(true))
     } else {
-        eprintln!("Trivially descriptive");
+        // Trivially descriptive
+        true
+    };
 
-        Some(quotient_graph)
-    }
+    let quotient_handling_time = start_time.elapsed();
+    let quotient_stats = QuotientStatistics {
+        quotient_size,
+        core_size: None,
+        max_orbit_size,
+        min_orbit_size,
+        descriptive,
+        validated,
+        quotient_handling_time,
+        kissat_time,
+        orbit_gen_time,
+        quotient_gen_time,
+        encoding_time,
+        orbit_sizes,
+    };
+    do_if_some(settings.get_stats(), |stats| {
+        stats.log_quotient_statistic(quotient_stats);
+        stats.log_iteration()
+    });
+
+    return_val
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -172,7 +153,7 @@ fn compute_quotient(
     generators_subset: &mut [Permutation],
     graph: &Graph,
     settings: &Settings,
-) -> Option<QuotientGraph> {
+) -> bool {
     let orbits = generate_orbits(generators_subset);
 
     let quotient_graph = QuotientGraph::from_graph_orbits(graph, orbits);
@@ -180,11 +161,6 @@ fn compute_quotient(
     let formula = encode_problem(&quotient_graph, graph);
 
     if let Some((formula, dict)) = formula {
-        if settings.print_formula {
-            print_formula(formula);
-            return None;
-        }
-
         if settings.validate {
             let transversal_result = solve_validate(formula, dict);
             if let Some(transversal) = transversal_result.unwrap() {
@@ -193,25 +169,22 @@ fn compute_quotient(
                     graph,
                     quotient_graph.encode_high()
                 ));
-                Some(quotient_graph)
+                true
             } else {
-                None
+                false
             }
         } else {
-            let descriptive = solve_mus(formula, &quotient_graph, graph, dict).unwrap();
-            descriptive.map(|_| quotient_graph)
+            solve(formula).unwrap()
         }
     } else {
-        eprintln!("Trivially descriptive");
-
-        Some(quotient_graph)
+        true
     }
 }
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Error> {
     // Read the graph from a file or via CLI and ...
-    let (mut graph, mut statistics, settings) = read_graph()?;
+    let (mut graph, mut settings) = read_graph()?;
 
     if let Some(eval_buf) = settings.evaluate {
         let logs = evaluate_log_file(&mut eval_buf.lines());
@@ -220,84 +193,60 @@ fn main() -> Result<(), Error> {
     }
 
     // Search for a non descriptive core in a single non-descriptive quotient.
-    if settings.nondescriptive_core {
-        return search_with_core(&mut graph, &settings);
+    if settings.nondescriptive_core.is_some() {
+        return search_with_core(&mut graph, &mut settings);
     }
 
     if settings.search_group {
         let nauty_graph = NautyGraph::from_graph(&mut graph);
         assert!(nauty_graph.check_valid());
 
-        search_group(&mut graph, nauty_graph, &settings);
+        search_group(&mut graph, nauty_graph, &mut settings);
         return Ok(());
     }
 
     // ... compute the generators with nauty or Traces. Then ...
-    let mut generators = compute_generators(&mut graph, &settings);
+    let mut generators = compute_generators(&mut graph, &mut settings);
 
-    do_if_some(&mut statistics, Statistics::log_nauty_done);
-    do_if_some(&mut statistics, |st| {
+    do_if_some(settings.get_stats(), Statistics::log_nauty_done);
+    do_if_some(settings.get_stats(), |st| {
         st.log_number_of_generators(generators.len())
     });
 
     // Sort the graph to allow easier lookup for edges.
     time!(graph_sort_time, _t, graph.sort());
-    do_if_some(&mut statistics, |stats| {
+    do_if_some(settings.get_stats(), |stats| {
         stats.log_graph_sorted(graph_sort_time)
     });
 
     if settings.gap_mode {
-        return gap_mode(&graph, generators, &mut statistics);
-    }
-
-    // Apply a heuristic and find the "best" quotient according
-    // to the chosen metric and print out the orbits for other
-    // tools to directly use them.
-    if settings.output_orbits {
-        let orbits: Orbits;
-
-        if generators.is_empty() {
-            orbits = empty_orbits(graph.size());
-        } else if let Some(metric) = settings.metric {
-            // Heuristic: full search in set of quotients induced by generators
-            orbits = generators
-                .into_iter()
-                .powerset()
-                .skip(1)
-                .filter_map(|mut subset| compute_quotient(&mut subset, &graph, &settings))
-                .sorted_unstable_by(|left, right| metric.compare_quotients(left, right))
-                .next()
-                .map_or(empty_orbits(graph.size()), |quotient| quotient.orbits);
-        } else {
-            orbits = generate_orbits(&mut generators);
-        }
-
-        print_orbits_nauty_style(orbits, statistics.as_ref());
-        return Ok(());
+        return gap_mode(&graph, generators, settings.get_stats());
     }
 
     // ... iterate over the specified subsets of generators...
-    if let Some(mut statistics) = statistics {
+    if settings.get_stats().is_some() {
         // ... with statistics ...
         if settings.iter_powerset {
             generators
                 .into_iter()
                 .powerset()
                 .skip(1)
-                .for_each(|mut subset| {
-                    let _ = compute_quotient_with_statistics(
-                        &mut subset,
-                        &graph,
-                        &settings,
-                        &mut statistics,
-                    );
+                .find_map(|mut subset| {
+                    if compute_quotient_with_statistics(&mut subset, &graph, &mut settings) {
+                        Some(())
+                    } else {
+                        None
+                    }
                 });
         } else if !generators.is_empty() {
-            compute_quotient_with_statistics(&mut generators, &graph, &settings, &mut statistics);
+            compute_quotient_with_statistics(&mut generators, &graph, &mut settings);
         }
 
-        statistics.log_end();
-        statistics.save_statistics()?;
+        do_if_some(settings.get_stats(), |statistics| {
+            statistics.exhausted = true;
+            statistics.log_end();
+            statistics.save_statistics().unwrap();
+        });
     } else {
         // ... or without.
         if settings.iter_powerset {
@@ -305,8 +254,12 @@ fn main() -> Result<(), Error> {
                 .into_iter()
                 .powerset()
                 .skip(1)
-                .for_each(|mut subset| {
-                    let _ = compute_quotient(&mut subset, &graph, &settings);
+                .find_map(|mut subset| {
+                    if compute_quotient(&mut subset, &graph, &settings) {
+                        Some(())
+                    } else {
+                        None
+                    }
                 });
         } else if !generators.is_empty() {
             compute_quotient(&mut generators, &graph, &settings);

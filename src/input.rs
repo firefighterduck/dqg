@@ -12,6 +12,7 @@ use structopt::StructOpt;
 
 use crate::{
     graph::{Graph, VertexIndex},
+    misc::CoreMetric,
     parser::{parse_csv_input, parse_dreadnaut_input, parse_txt_input},
     statistics::{Statistics, StatisticsLevel},
     Error, MetricUsed, NautyTraces, Settings,
@@ -43,10 +44,11 @@ struct CommandLineOptions {
     /// the graphs automorphism group.
     #[structopt(short = "-t", long)]
     use_traces: bool,
-    /// Search for the smallest non-descriptive quotient
-    /// core in the first non-descriptive quotient graph.
+    /// Use nondescriptive cores and the metric
+    /// to guide the search.
+    /// Possible values: recolor, pow_gen
     #[structopt(short = "-q", long)]
-    nondescriptive_core: bool,
+    nondescriptive_core: Option<CoreMetric>,
     /// Search in the whole automorphism group instead
     /// of a set of generators.
     #[structopt(short = "-g", long)]
@@ -151,7 +153,7 @@ with the next vertex or a `.` to end inputting edges.", index, index);
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
+pub fn read_graph() -> Result<(Graph, Settings), Error> {
     let cl_options = CommandLineOptions::from_args();
 
     if let Some(eval_path) = cl_options.evaluate {
@@ -159,7 +161,6 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         let buf = BufReader::new(eval_file);
         return Ok((
             Graph::new_ordered(0),
-            None,
             Settings {
                 evaluate: Some(buf),
                 ..Default::default()
@@ -251,7 +252,8 @@ pub fn read_graph() -> Result<(Graph, Option<Statistics>, Settings), Error> {
         } else {
             NautyTraces::Nauty
         },
+        statistics,
     };
 
-    Ok((graph, statistics, settings))
+    Ok((graph, settings))
 }

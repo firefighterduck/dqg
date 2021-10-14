@@ -123,7 +123,7 @@ impl fmt::Debug for OrbitStatistics {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn print_clause<'a>(clause: impl Iterator<Item = &'a Literal>) {
+fn _print_clause<'a>(clause: impl Iterator<Item = &'a Literal>) {
     print!("(");
     itertools::Itertools::intersperse(
         clause.map(|literal| {
@@ -141,8 +141,8 @@ fn print_clause<'a>(clause: impl Iterator<Item = &'a Literal>) {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub fn print_formula(formula: impl Iterator<Item = Clause>) {
-    formula.for_each(|clause| print_clause(clause.iter()));
+pub fn _print_formula(formula: impl Iterator<Item = Clause>) {
+    formula.for_each(|clause| _print_clause(clause.iter()));
     println!("True");
 }
 
@@ -314,6 +314,15 @@ macro_rules! print_time_mut {
         let before = std::time::Instant::now();
         let mut $ret = $exp;
         println!("{} took {:?}", $name, before.elapsed());
+    };
+}
+
+#[macro_export]
+macro_rules! time_assign {
+    ($name:ident, $ret:ident, $exp:expr) => {
+        let before = std::time::Instant::now();
+        $ret = $exp;
+        let $name = before.elapsed();
     };
 }
 
