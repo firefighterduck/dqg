@@ -156,10 +156,11 @@ pub fn write_formula_dimacs(
         var_count: variable_number,
         clause_count: formula.len(),
     };
-    write_header(writer, header)?;
+    let mut writer = flussab::DeferredWriter::from_write(writer);
+    write_header(&mut writer, header);
 
     for clause in formula {
-        write_clause(writer, clause)?;
+        write_clause(&mut writer, clause);
     }
 
     writer.flush().map_err(Error::from)
@@ -225,9 +226,8 @@ pub fn _print_dot(quotient_encoding: QuotientGraphEncoding, graph: &Graph) -> Re
     let mut vertices_in_core = quotient_encoding
         .1
         .iter()
-        .map(|(_, vertices)| vertices)
+        .flat_map(|(_, vertices)| vertices)
         .cloned()
-        .flatten()
         .collect::<Vec<VertexIndex>>();
     vertices_in_core.sort_unstable();
 
@@ -330,7 +330,7 @@ macro_rules! time_assign {
 macro_rules! parse_single_line {
     ($ret:ident, $exp:expr) => {
         let (res, $ret) = $exp?;
-        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
+        eof::<$crate::parser::Input<'_>, $crate::parser::ParseError<'_>>(res)?;
     };
 }
 
@@ -349,17 +349,17 @@ macro_rules! get_line {
 #[macro_export]
 macro_rules! get_line_parse {
     ($lines:ident, $ret:ident, $exp:expr) => {
-        crate::get_line!(line, $lines);
+        $crate::get_line!(line, $lines);
         let (res, $ret) = $exp(&line)?;
-        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
+        eof::<$crate::parser::Input<'_>, $crate::parser::ParseError<'_>>(res)?;
     };
 }
 
 #[macro_export]
 macro_rules! get_line_recognize {
     ($lines:ident, $exp:expr) => {
-        crate::get_line!(line, $lines);
+        $crate::get_line!(line, $lines);
         let (res, _) = $exp(&line)?;
-        eof::<crate::parser::Input<'_>, crate::parser::ParseError<'_>>(res)?;
+        eof::<$crate::parser::Input<'_>, $crate::parser::ParseError<'_>>(res)?;
     };
 }

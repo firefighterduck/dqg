@@ -1,21 +1,22 @@
 [package]
 name = "dqg"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Florian Sextl <sextl@in.tum.de>"]
 edition = "2018"
 
 [dependencies]
-nauty-Traces-sys = {git = "https://github.com/firefighterduck/nauty-Traces-sys"}
+nauty-Traces-sys = "0.7"
 kissat-rs = {git = "https://github.com/firefighterduck/kissat-rs", branch = "main" }
 libffi = "1.0.1"
-custom_debug_derive = "0.5.0"
-itertools = "0.10.1"
-nom = "7.0.0"
+custom_debug_derive = "0.6.1"
+itertools = "0.13.0"
+nom = "7.1.3"
 thiserror = "1.0.26"
 structopt = "0.3.21"
-num = "0.4.0"
+num = "0.4.3"
 rayon = "1.5.1"
-flussab-cnf = "0.2.0"
+flussab-cnf = "0.3.1"
+flussab = "0.3.1"
 
 [profile.release]
 debug = true

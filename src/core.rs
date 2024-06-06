@@ -207,10 +207,7 @@ fn search_with_core_power_generators(
                 power
             })
             .collect_vec();
-        orig_generators = orig_generators
-            .into_iter()
-            .filter(|(_, n)| *n > 0)
-            .collect();
+        orig_generators.retain(|(_, n)| *n > 0);
 
         counter += 1;
 
@@ -250,7 +247,7 @@ fn merge_generators(generators: Vec<Permutation>, core: &[OrbitEncoding]) -> Vec
     if involved.len() > 1 {
         let merged = involved
             .into_iter()
-            .fold1(|first, second| first.merge(second).unwrap());
+            .reduce(|first, second| first.merge(second).unwrap());
         if let Some(merged) = merged {
             next_generators.push(merged);
         }

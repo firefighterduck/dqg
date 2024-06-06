@@ -150,6 +150,8 @@ pub fn solve_mus_kitten(
     graph: &Graph,
     dict: SATEncodingDictionary,
 ) -> Result<Option<QuotientGraphEncoding>, Error> {
+    use flussab_cnf::cnf::Config;
+
     let formula_collected = formula.collect_vec();
 
     if Solver::decide_formula(formula_collected.iter().cloned())? {
@@ -170,7 +172,8 @@ pub fn solve_mus_kitten(
         // 20 for Unsatisfiable
         if kitten_exit.code() == Some(20) {
             let core_file = File::open("./core.cnf")?;
-            let mut core_parser = Parser::from_read(core_file, true).unwrap();
+            let conf = Config::ignore_header(Default::default(), true);
+            let mut core_parser = Parser::from_read(core_file, conf).unwrap();
             let mut core: Vec<Vec<VertexIndex>> = Vec::new();
 
             loop {

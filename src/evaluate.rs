@@ -124,14 +124,12 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
     let metric = peekable.find_map(|line| {
         line.unwrap()
             .strip_suffix(':')
-            .map(|line| MetricUsed::from_str(line).ok())
-            .flatten()
+            .and_then(|line| MetricUsed::from_str(line).ok())
     })?;
     let tool_stats = peekable
         .next()
-        .map(|line| evaluate_tool_stats(line.as_ref().unwrap()))
-        .flatten()
-        .unwrap_or_else(Default::default);
+        .and_then(|line| evaluate_tool_stats(line.as_ref().unwrap()))
+        .unwrap_or_default();
     let default_result = peekable.find_map(|line| evaluate_plan_result(line.unwrap().as_str()))?;
 
     let mut quotient_result = QuotientResult::TimedOut;
@@ -167,8 +165,7 @@ fn evaluate_log<B: BufRead>(peekable: &mut Peekable<&mut Lines<B>>) -> Option<Lo
             .as_ref()
             .unwrap()
             .strip_suffix(':')
-            .map(|line| MetricUsed::from_str(line).ok())
-            .flatten()
+            .and_then(|line| MetricUsed::from_str(line).ok())
             .is_some()
         {
             quotient_result = QuotientResult::TimedOut;

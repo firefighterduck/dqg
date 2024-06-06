@@ -24,7 +24,7 @@ jobs:
       - name: Run cargo-about
         run:  cargo install cargo-about && 
               cargo about init &&
-              cargo about generate about.hbs > licenses.html
+              cargo about generate -o licenses.html about.hbs
 
       - name: Run cargo check
         uses: actions-rs/cargo@v1

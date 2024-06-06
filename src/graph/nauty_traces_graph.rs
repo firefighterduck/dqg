@@ -118,7 +118,7 @@ impl TracesGraph {
         for (index, vertex) in graph.vertices.iter().sorted().enumerate() {
             debug_assert_eq!(index as i32, vertex.index);
             traces_graph.sparse_graph.d[index] = vertex.edges_to.len().try_into().unwrap();
-            traces_graph.sparse_graph.v[index] = edge_counter.try_into().unwrap();
+            traces_graph.sparse_graph.v[index] = edge_counter;
 
             for end in vertex.edges_to.iter() {
                 traces_graph.sparse_graph.e[edge_counter] = *end;

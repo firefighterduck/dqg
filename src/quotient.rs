@@ -303,7 +303,7 @@ fn get_orbit(orbits: &[VertexIndex], vertex: VertexIndex) -> VertexIndex {
 // Generate the orbits of a quotient graph from the generators of the original graph.
 pub fn generate_orbits(generators: &mut [Permutation]) -> Orbits {
     let number_of_vertices = generators
-        .get(0)
+        .first()
         .expect("Empty subset can't be used to generate orbits")
         .len();
     let mut orbits = empty_orbits(number_of_vertices);

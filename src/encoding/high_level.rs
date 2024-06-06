@@ -41,7 +41,7 @@ impl HighLevelEncoding for Orbits {
             .enumerate()
             .filter(|(_, orbit)| *orbit >= &0)
             .sorted_by(|(_, orbit_a), (_, orbit_b)| orbit_a.cmp(orbit_b))
-            .group_by(|(_, orbit)| **orbit)
+            .chunk_by(|(_, orbit)| **orbit)
             .into_iter()
             .map(|(orbit_number, vertices)| {
                 (

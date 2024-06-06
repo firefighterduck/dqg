@@ -43,7 +43,7 @@ pub fn encode_problem(
         Some((
             transversal_encoding
                 .into_iter()
-                .chain(descriptive_constraint_encoding.into_iter()),
+                .chain(descriptive_constraint_encoding),
             dict,
         ))
     }

@@ -171,7 +171,6 @@ pub fn read_graph() -> Result<(Graph, Settings), Error> {
     let mut use_traces = cl_options.use_traces;
     let mut graph;
     let mut out_file;
-    let statistics;
 
     if let Some(path_to_graph_file) = cl_options.input {
         // Either read the graph from a file ..
@@ -223,15 +222,15 @@ pub fn read_graph() -> Result<(Graph, Settings), Error> {
     }
 
     // Start the statistics after the graph reading is done.
-    if cl_options.statistics_level == StatisticsLevel::None {
-        statistics = None;
+    let statistics = if cl_options.statistics_level == StatisticsLevel::None {
+        None
     } else {
-        statistics = Some(Statistics::new(
+        Some(Statistics::new(
             cl_options.statistics_level,
             out_file,
             graph.size(),
-        ));
-    }
+        ))
+    };
 
     let settings = Settings {
         iter_powerset: cl_options.iter_powerset,

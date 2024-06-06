@@ -192,7 +192,7 @@ impl Permutation {
     }
 
     fn from_cycle(cycle: &[VertexIndex], raw: &mut [VertexIndex]) {
-        let first = cycle.get(0).unwrap();
+        let first = cycle.first().unwrap();
         let mut last = first;
 
         for current in cycle[1..].iter() {
